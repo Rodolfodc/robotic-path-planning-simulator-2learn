@@ -54,3 +54,7 @@ python web/build.py
 ## Publicar no GitHub Pages
 
 Em **Settings → Pages**, escolha *Deploy from a branch*, branch `main`, pasta `/ (root)`. O repositório precisa ser público.
+
+## Licença
+
+[Apache 2.0](LICENSE). Você pode usar, modificar e distribuir à vontade, inclusive em projetos comerciais, desde que mantenha o aviso de copyright e o arquivo [NOTICE](NOTICE), dando crédito a Rodolfo Dalla Costa.
