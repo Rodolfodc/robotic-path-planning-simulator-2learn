@@ -1,18 +1,18 @@
 """
-Interface interativa: A*, Potential Fields e PID no mesmo cenário.
+Interactive interface: A*, Potential Fields and PID on the same scenario.
 
     python interface_planners.py
 
-  - Aba "Exibir": liga/desliga o que aparece no gráfico (algoritmos, caminho
-    planejado, caminho percorrido com PID, obstáculos, grade, ...).
-  - Demais abas: parâmetros de cada parte, todos com um valor padrão.
-  - Caixa "aleatório" ao lado de cada parâmetro: a cada execução um novo valor
-    é sorteado dentro da faixa mostrada e fica visível no campo. Desmarque a
-    caixa para FIXAR aquele valor (e repetir o experimento).
-  - Para rodar de novo depois de mudar um parâmetro: botão "Executar" ou Enter.
+  - "Display" tab: toggles what appears on the plot (algorithms, planned
+    path, path driven with PID, obstacles, grid, ...).
+  - Other tabs: parameters for each part, all with a default value.
+  - "random" box next to each parameter: on every run a new value is drawn
+    within the range shown and stays visible in the field. Uncheck the box
+    to LOCK that value (and repeat the experiment).
+  - To run again after changing a parameter: "Run" button or Enter.
 
-Reaproveita (sem alterar) os módulos existentes: potential_fields.py, astar.py,
-pid.py, follow_path.py e compare_planners.py.
+Reuses (without changing) the existing modules: potential_fields.py, astar.py,
+pid.py, follow_path.py and compare_planners.py.
 """
 
 import queue
@@ -27,518 +27,519 @@ from matplotlib.patches import Circle
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
 import potential_fields as pf
-from astar import a_estrela, OBSTACULO, euclidiana, manhattan, chebyshev
+from astar import a_star, OBSTACLE, euclidean, manhattan, chebyshev
 from pid import PID
-from follow_path import reamostrar, angulo_normalizado, colidiu
-from compare_planners import comprimento
+from follow_path import resample, normalize_angle, collided
+from compare_planners import path_length
 
 # ---------------------------------------------------------------
-# 1. Parâmetros: (chave, rótulo, padrão, tipo, faixa do sorteio)
-#    faixa = (mín, máx) para números, ou lista de opções para escolhas.
+# 1. Parameters: (key, label, default, type, random range)
+#    range = (min, max) for numbers, or a list of options for choices.
 # ---------------------------------------------------------------
-SECOES = [
-    ("Cenário", [
-        ("semente",       "semente",             42,    int,   (0, 99999)),
-        ("n_obstaculos",  "nº de obstáculos",    4,     int,   (2, 8)),
-        ("raio_min",      "raio mínimo",         0.5,   float, (0.3, 0.8)),
-        ("raio_max",      "raio máximo",         1.2,   float, (0.9, 1.5)),
-        ("folga",         "folga entre obstáculos", 0.5, float, (0.2, 1.0)),
-        ("inicio_x",      "início x",            0.0,   float, (0.0, 2.0)),
-        ("inicio_y",      "início y",            0.0,   float, (0.0, 2.0)),
-        ("objetivo_x",    "objetivo x",          10.0,  float, (8.0, 10.0)),
-        ("objetivo_y",    "objetivo y",          10.0,  float, (8.0, 10.0)),
+SECTIONS = [
+    ("Scenario", [
+        ("seed",          "seed",                 42,    int,   (0, 99999)),
+        ("n_obstacles",   "no. of obstacles",     4,     int,   (2, 8)),
+        ("min_radius",    "minimum radius",       0.5,   float, (0.3, 0.8)),
+        ("max_radius",    "maximum radius",       1.2,   float, (0.9, 1.5)),
+        ("clearance",     "clearance between obstacles", 0.5, float, (0.2, 1.0)),
+        ("start_x",       "start x",              0.0,   float, (0.0, 2.0)),
+        ("start_y",       "start y",              0.0,   float, (0.0, 2.0)),
+        ("goal_x",        "goal x",               10.0,  float, (8.0, 10.0)),
+        ("goal_y",        "goal y",               10.0,  float, (8.0, 10.0)),
     ]),
     ("Potential Fields", [
-        ("k_att",      "ganho atrativo (k_att)",   1.0,  float, (0.5, 3.0)),
-        ("k_rep",      "ganho repulsivo (k_rep)",  5.0,  float, (1.0, 15.0)),
-        ("rho_0",      "zona de influência (rho_0)", 2.0, float, (1.0, 3.0)),
-        ("passo",      "passo",                    0.05, float, (0.02, 0.1)),
-        ("tolerancia", "tolerância ao objetivo",   0.1,  float, (0.05, 0.2)),
-        ("max_iter",   "máx. de iterações",        2000, int,   (500, 4000)),
+        ("k_att",     "attractive gain (k_att)",   1.0,  float, (0.5, 3.0)),
+        ("k_rep",     "repulsive gain (k_rep)",    5.0,  float, (1.0, 15.0)),
+        ("rho_0",     "influence zone (rho_0)",    2.0,  float, (1.0, 3.0)),
+        ("step",      "step",                      0.05, float, (0.02, 0.1)),
+        ("tolerance", "goal tolerance",            0.1,  float, (0.05, 0.2)),
+        ("max_iter",  "max. iterations",           2000, int,   (500, 4000)),
     ]),
     ("A*", [
-        ("res",       "tamanho da célula",  0.2,         float, [0.2, 0.25, 0.5]),
-        ("margem",    "margem de segurança", 0.1,        float, (0.0, 0.3)),
-        ("distancia", "métrica de distância", "euclidiana", str,
-         ["euclidiana", "manhattan", "chebyshev"]),
+        ("res",      "cell size",        0.2,         float, [0.2, 0.25, 0.5]),
+        ("margin",   "safety margin",    0.1,         float, (0.0, 0.3)),
+        ("distance", "distance metric",  "euclidean", str,
+         ["euclidean", "manhattan", "chebyshev"]),
     ]),
-    ("Robô e PID", [
-        ("v_max",         "velocidade máxima",       1.5,  float, (0.5, 2.5)),
-        ("espaco_pontos", "espaço entre pontos-alvo", 0.5, float, (0.25, 1.0)),
-        ("raio_aceite",   "raio de aceitação",        0.3, float, (0.15, 0.5)),
-        ("massa",         "massa",                    1.0, float, (0.5, 2.0)),
-        ("inercia",       "inércia de giro",          0.5, float, (0.2, 1.0)),
-        ("kp_v",          "velocidade: Kp",           3.0, float, (1.0, 6.0)),
-        ("ki_v",          "velocidade: Ki",           0.5, float, (0.0, 1.0)),
-        ("kd_v",          "velocidade: Kd",           0.0, float, (0.0, 0.3)),
-        ("kp_th",         "direção: Kp",              4.0, float, (1.0, 8.0)),
-        ("ki_th",         "direção: Ki",              0.0, float, (0.0, 0.3)),
-        ("kd_th",         "direção: Kd",              1.0, float, (0.0, 2.0)),
+    ("Robot and PID", [
+        ("v_max",            "maximum speed",            1.5, float, (0.5, 2.5)),
+        ("waypoint_spacing", "spacing between targets",  0.5, float, (0.25, 1.0)),
+        ("accept_radius",    "acceptance radius",        0.3, float, (0.15, 0.5)),
+        ("mass",             "mass",                     1.0, float, (0.5, 2.0)),
+        ("inertia",          "rotational inertia",       0.5, float, (0.2, 1.0)),
+        ("kp_v",             "speed: Kp",                3.0, float, (1.0, 6.0)),
+        ("ki_v",             "speed: Ki",                0.5, float, (0.0, 1.0)),
+        ("kd_v",             "speed: Kd",                0.0, float, (0.0, 0.3)),
+        ("kp_th",            "heading: Kp",              4.0, float, (1.0, 8.0)),
+        ("ki_th",            "heading: Ki",              0.0, float, (0.0, 0.3)),
+        ("kd_th",            "heading: Kd",              1.0, float, (0.0, 2.0)),
     ]),
 ]
-PARAMETROS = {c: (r, p, t, f) for _, ps in SECOES for c, r, p, t, f in ps}
+PARAMETERS = {c: (l, d, t, r) for _, ps in SECTIONS for c, l, d, t, r in ps}
 
-# Itens da aba "Exibir": (chave, rótulo, padrão)
-EXIBIR = [
-    ("pf",         "Potential Fields",                   True),
-    ("astar",      "A*",                                 True),
-    ("planejado",  "Caminho planejado (sem PID)",        True),
-    ("percorrido", "Caminho percorrido (com PID)",       True),
-    ("obstaculos", "Obstáculos",                         True),
-    ("influencia", "Zona de influência (rho_0)",         False),
-    ("grade",      "Grade bloqueada do A*",              False),
-    ("pontos",     "Pontos-alvo do seguidor",            False),
+# Items in the "Display" tab: (key, label, default)
+DISPLAY = [
+    ("pf",        "Potential Fields",                   True),
+    ("astar",     "A*",                                 True),
+    ("planned",   "Planned path (without PID)",         True),
+    ("driven",    "Driven path (with PID)",             True),
+    ("obstacles", "Obstacles",                          True),
+    ("influence", "Influence zone (rho_0)",             False),
+    ("grid",      "A* blocked grid",                    False),
+    ("points",    "Follower target points",             False),
 ]
 
-CORES = {"pf": ("tab:blue", "navy"), "astar": ("tab:orange", "saddlebrown")}
-NOMES = {"pf": "Potential Fields", "astar": "A*"}
-METRICAS = {"euclidiana": euclidiana, "manhattan": manhattan, "chebyshev": chebyshev}
+COLORS = {"pf": ("tab:blue", "navy"), "astar": ("tab:orange", "saddlebrown")}
+NAMES = {"pf": "Potential Fields", "astar": "A*"}
+METRICS = {"euclidean": euclidean, "manhattan": manhattan, "chebyshev": chebyshev}
 
-# Constantes da física do robô (não expostas na interface)
+# Robot physics constants (not exposed in the interface)
 DT = 0.05
 T_MAX = 80.0
-ATRITO_LIN = 0.5
-ATRITO_ANG = 0.5
-FORCA_MAX = 3.0
-TORQUE_MAX = 3.0
-TOL_OBJETIVO = 0.2
+LIN_FRICTION = 0.5
+ANG_FRICTION = 0.5
+MAX_FORCE = 3.0
+MAX_TORQUE = 3.0
+GOAL_TOL = 0.2
 
 
-def sortear(tipo, faixa, rng):
-    """Sorteia um valor na faixa (ou entre as opções) do parâmetro."""
-    if isinstance(faixa, list):
-        return faixa[int(rng.integers(len(faixa)))]
-    lo, hi = faixa
-    if tipo is int:
+def draw_value(kind, value_range, rng):
+    """Draws a value within the parameter's range (or among its options)."""
+    if isinstance(value_range, list):
+        return value_range[int(rng.integers(len(value_range)))]
+    lo, hi = value_range
+    if kind is int:
         return int(rng.integers(lo, hi + 1))
     return round(float(rng.uniform(lo, hi)), 2)
 
 
 # ---------------------------------------------------------------
-# 2. Cálculo (sem interface gráfica; roda numa thread)
+# 2. Computation (no graphical interface; runs in a thread)
 # ---------------------------------------------------------------
-def planejar_pf(p, obstaculos, inicio, objetivo):
+def plan_pf(p, obstacles, start, goal):
     pf.k_att, pf.k_rep, pf.rho_0 = p["k_att"], p["k_rep"], p["rho_0"]
-    pf.passo, pf.tolerancia, pf.max_iter = p["passo"], p["tolerancia"], int(p["max_iter"])
+    pf.step, pf.tolerance, pf.max_iter = p["step"], p["tolerance"], int(p["max_iter"])
     pf.verbose = False
-    caminho, ok = pf.planejar(inicio, objetivo, obstaculos)
-    # com ganhos ruins o método diverge (valores enormes/NaN): corta no ponto sensato
-    valido = np.all(np.isfinite(caminho), axis=1) & np.all(np.abs(caminho) < 1e3, axis=1)
-    if not valido.all():
-        caminho, ok = caminho[:int(np.argmin(valido))], False
-        if len(caminho) == 0:
-            caminho = np.array([inicio])
-    return caminho, ok
+    path, ok = pf.plan(start, goal, obstacles)
+    # with bad gains the method diverges (huge values/NaN): cut at the last sensible point
+    valid = np.all(np.isfinite(path), axis=1) & np.all(np.abs(path) < 1e3, axis=1)
+    if not valid.all():
+        path, ok = path[:int(np.argmin(valid))], False
+        if len(path) == 0:
+            path = np.array([start])
+    return path, ok
 
 
-def criar_grade(p, obstaculos):
-    """Rasteriza os círculos. mapa[y, x]: 1 = livre, OBSTACULO = bloqueada."""
-    res, margem = p["res"], p["margem"]
+def create_grid(p, obstacles):
+    """Rasterizes the circles. grid[y, x]: 1 = free, OBSTACLE = blocked."""
+    res, margin = p["res"], p["margin"]
     n = int(round(10 / res)) + 1
     xs = np.arange(n) * res
     X, Y = np.meshgrid(xs, xs)
-    mapa = np.ones((n, n))
-    for centro, raio in obstaculos:
-        mapa[np.hypot(X - centro[0], Y - centro[1]) <= raio + margem] = OBSTACULO
-    return mapa
+    grid = np.ones((n, n))
+    for center, radius in obstacles:
+        grid[np.hypot(X - center[0], Y - center[1]) <= radius + margin] = OBSTACLE
+    return grid
 
 
-def planejar_astar(p, mapa, inicio, objetivo):
+def plan_astar(p, grid, start, goal):
     res = p["res"]
-    cel_ini = tuple(int(v) for v in np.round(inicio / res))
-    cel_obj = tuple(int(v) for v in np.round(objetivo / res))
-    mapa = mapa.copy()
-    mapa[cel_ini[1], cel_ini[0]] = 1       # início e objetivo nunca são bloqueados
-    mapa[cel_obj[1], cel_obj[0]] = 1
-    cam, _ = a_estrela(mapa, cel_ini, cel_obj, distancia=METRICAS[p["distancia"]])
-    if cam is None:
-        return np.array([inicio]), False
-    cam = np.array(cam, dtype=float) * res
-    cam[0], cam[-1] = inicio, objetivo     # extremos exatos (a célula é arredondada)
-    return cam, True
+    start_cell = tuple(int(v) for v in np.round(start / res))
+    goal_cell = tuple(int(v) for v in np.round(goal / res))
+    grid = grid.copy()
+    grid[start_cell[1], start_cell[0]] = 1    # start and goal are never blocked
+    grid[goal_cell[1], goal_cell[0]] = 1
+    path, _ = a_star(grid, start_cell, goal_cell, distance=METRICS[p["distance"]])
+    if path is None:
+        return np.array([start]), False
+    path = np.array(path, dtype=float) * res
+    path[0], path[-1] = start, goal           # exact endpoints (the cell is rounded)
+    return path, True
 
 
-def erro_rastreamento(trajetoria, caminho):
-    """Distância de cada ponto percorrido até o caminho planejado.
-    Em blocos e com o caminho limitado a ~2000 pontos, para a memória ficar sempre pequena."""
-    denso = reamostrar(caminho, max(0.02, comprimento(caminho) / 2000))
-    erros = np.empty(len(trajetoria))
-    for i in range(0, len(trajetoria), 100):
-        bloco = trajetoria[i:i + 100]
-        d = np.linalg.norm(bloco[:, None, :] - denso[None, :, :], axis=-1)
-        erros[i:i + 100] = d.min(axis=1)
-    return erros
+def tracking_error(trajectory, path):
+    """Distance from each driven point to the planned path.
+    In chunks and with the path capped at ~2000 points, so memory always stays small."""
+    dense = resample(path, max(0.02, path_length(path) / 2000))
+    errors = np.empty(len(trajectory))
+    for i in range(0, len(trajectory), 100):
+        chunk = trajectory[i:i + 100]
+        d = np.linalg.norm(chunk[:, None, :] - dense[None, :, :], axis=-1)
+        errors[i:i + 100] = d.min(axis=1)
+    return errors
 
 
-def seguir(caminho, p):
-    """Robô com inércia seguindo o caminho com dois PIDs (velocidade e direção).
-    Estado: (x, y), ângulo th, velocidade v, velocidade angular w."""
-    if len(caminho) < 2:
-        return caminho.copy(), False, caminho.copy()
+def follow(path, p):
+    """Robot with inertia following the path with two PIDs (speed and heading).
+    State: (x, y), angle th, speed v, angular speed w."""
+    if len(path) < 2:
+        return path.copy(), False, path.copy()
 
-    pontos = reamostrar(caminho, p["espaco_pontos"])
+    points = resample(path, p["waypoint_spacing"])
     pid_v = PID(p["kp_v"], p["ki_v"], p["kd_v"])
     pid_th = PID(p["kp_th"], p["ki_th"], p["kd_th"])
 
-    x, y = caminho[0]
-    th = np.arctan2(pontos[0][1] - y, pontos[0][0] - x)
+    x, y = path[0]
+    th = np.arctan2(points[0][1] - y, points[0][0] - x)
     v = w = 0.0
     k = 0
-    chegou = False
-    trajetoria = [(x, y)]
+    reached = False
+    trajectory = [(x, y)]
 
     for _ in range(int(T_MAX / DT)):
-        alvo = pontos[k]
-        dist = np.hypot(alvo[0] - x, alvo[1] - y)
+        target = points[k]
+        dist = np.hypot(target[0] - x, target[1] - y)
 
-        ultimo = k == len(pontos) - 1
-        if dist < (TOL_OBJETIVO if ultimo else p["raio_aceite"]):
-            if ultimo:
-                chegou = True
+        last = k == len(points) - 1
+        if dist < (GOAL_TOL if last else p["accept_radius"]):
+            if last:
+                reached = True
                 break
             k += 1
-            alvo = pontos[k]
-            dist = np.hypot(alvo[0] - x, alvo[1] - y)
+            target = points[k]
+            dist = np.hypot(target[0] - x, target[1] - y)
 
-        erro_th = angulo_normalizado(np.arctan2(alvo[1] - y, alvo[0] - x) - th)
-        tau = pid_th.calcular(erro_th, 0.0, DT)
+        th_error = normalize_angle(np.arctan2(target[1] - y, target[0] - x) - th)
+        tau = pid_th.compute(th_error, 0.0, DT)
 
-        v_des = p["v_max"] * max(0.0, np.cos(erro_th)) ** 3
-        if ultimo:
+        v_des = p["v_max"] * max(0.0, np.cos(th_error)) ** 3
+        if last:
             v_des = min(v_des, 1.5 * dist)
-        F = pid_v.calcular(v_des, v, DT)
+        F = pid_v.compute(v_des, v, DT)
 
-        F = np.clip(F, -FORCA_MAX, FORCA_MAX)
-        tau = np.clip(tau, -TORQUE_MAX, TORQUE_MAX)
+        F = np.clip(F, -MAX_FORCE, MAX_FORCE)
+        tau = np.clip(tau, -MAX_TORQUE, MAX_TORQUE)
 
-        v += (F - ATRITO_LIN * v) / p["massa"] * DT
-        w += (tau - ATRITO_ANG * w) / p["inercia"] * DT
+        v += (F - LIN_FRICTION * v) / p["mass"] * DT
+        w += (tau - ANG_FRICTION * w) / p["inertia"] * DT
         th += w * DT
         x += v * np.cos(th) * DT
         y += v * np.sin(th) * DT
-        trajetoria.append((x, y))
+        trajectory.append((x, y))
 
-    return np.array(trajetoria), chegou, pontos
+    return np.array(trajectory), reached, points
 
 
-def calcular(p, usar_pf, usar_astar, com_pid, com_grade):
-    """Gera o cenário e roda o que foi pedido. Retorna um dicionário de resultados."""
-    inicio = np.array([p["inicio_x"], p["inicio_y"]], dtype=float)
-    objetivo = np.array([p["objetivo_x"], p["objetivo_y"]], dtype=float)
+def compute(p, use_pf, use_astar, with_pid, with_grid):
+    """Generates the scenario and runs what was requested. Returns a dictionary of results."""
+    start = np.array([p["start_x"], p["start_y"]], dtype=float)
+    goal = np.array([p["goal_x"], p["goal_y"]], dtype=float)
 
-    # parâmetros que o gerador de obstáculos lê do módulo potential_fields
-    pf.raio_min, pf.raio_max, pf.folga, pf.rho_0 = p["raio_min"], p["raio_max"], p["folga"], p["rho_0"]
-    rng = np.random.default_rng(p["semente"])
-    obstaculos = pf.gerar_obstaculos(p["n_obstaculos"], rng, inicio, objetivo)
+    # parameters the obstacle generator reads from the potential_fields module
+    pf.min_radius, pf.max_radius, pf.clearance, pf.rho_0 = (
+        p["min_radius"], p["max_radius"], p["clearance"], p["rho_0"])
+    rng = np.random.default_rng(p["seed"])
+    obstacles = pf.generate_obstacles(p["n_obstacles"], rng, start, goal)
 
-    mapa = criar_grade(p, obstaculos) if (usar_astar or com_grade) else None
+    grid = create_grid(p, obstacles) if (use_astar or with_grid) else None
 
-    planos = {}
-    escolhidos = [("pf", usar_pf), ("astar", usar_astar)]
-    for chave, ativo in escolhidos:
-        if not ativo:
+    plans = {}
+    selected = [("pf", use_pf), ("astar", use_astar)]
+    for key, active in selected:
+        if not active:
             continue
         t0 = time.perf_counter()
-        if chave == "pf":
-            caminho, ok = planejar_pf(p, obstaculos, inicio, objetivo)
+        if key == "pf":
+            path, ok = plan_pf(p, obstacles, start, goal)
         else:
-            caminho, ok = planejar_astar(p, mapa, inicio, objetivo)
-        info = {"caminho": caminho, "ok": ok, "t_plano": time.perf_counter() - t0,
-                "L_plano": comprimento(caminho) if len(caminho) > 1 else 0.0}
+            path, ok = plan_astar(p, grid, start, goal)
+        info = {"path": path, "ok": ok, "t_plan": time.perf_counter() - t0,
+                "L_plan": path_length(path) if len(path) > 1 else 0.0}
 
-        if com_pid:
-            traj, chegou, pontos = seguir(caminho, p)
-            info.update(trajetoria=traj, chegou=chegou, pontos=pontos,
-                        L_real=comprimento(traj) if len(traj) > 1 else 0.0,
-                        erro=erro_rastreamento(traj, caminho),
-                        bateu=colidiu(traj, obstaculos),
+        if with_pid:
+            traj, reached, points = follow(path, p)
+            info.update(trajectory=traj, reached=reached, points=points,
+                        L_real=path_length(traj) if len(traj) > 1 else 0.0,
+                        error=tracking_error(traj, path),
+                        hit=collided(traj, obstacles),
                         t_sim=(len(traj) - 1) * DT)
-        planos[chave] = info
+        plans[key] = info
 
-    return {"params": p, "inicio": inicio, "objetivo": objetivo,
-            "obstaculos": obstaculos, "mapa": mapa, "planos": planos}
+    return {"params": p, "start": start, "goal": goal,
+            "obstacles": obstacles, "grid": grid, "plans": plans}
 
 
 # ---------------------------------------------------------------
 # 3. Interface
 # ---------------------------------------------------------------
 class App:
-    def __init__(self, raiz):
-        self.raiz = raiz
-        raiz.title("A*, Potential Fields e PID")
-        raiz.protocol("WM_DELETE_WINDOW", self._fechar)
+    def __init__(self, root):
+        self.root = root
+        root.title("A*, Potential Fields and PID")
+        root.protocol("WM_DELETE_WINDOW", self._close)
 
-        self.vars = {}           # chave -> StringVar com o valor mostrado
-        self.aleatorio = {}      # chave -> BooleanVar (sorteia a cada execução?)
-        self.widgets = {}        # chave -> campo de entrada
-        self.exibir = {}         # chave -> BooleanVar (mostrar no gráfico?)
+        self.vars = {}           # key -> StringVar with the displayed value
+        self.random = {}         # key -> BooleanVar (draw on every run?)
+        self.widgets = {}        # key -> input field
+        self.display = {}        # key -> BooleanVar (show on the plot?)
         self.rng = np.random.default_rng()
-        self.fila = queue.Queue()
-        self.resultado = None
-        self.ocupado = False
+        self.queue = queue.Queue()
+        self.result = None
+        self.busy = False
 
-        self._montar_painel()
-        self._montar_grafico()
-        self.executar()
+        self._build_panel()
+        self._build_plot()
+        self.run()
 
-    # ---------- montagem ----------
-    def _montar_painel(self):
-        esquerda = ttk.Frame(self.raiz, padding=8)
-        esquerda.pack(side="left", fill="y")
+    # ---------- layout ----------
+    def _build_panel(self):
+        left = ttk.Frame(self.root, padding=8)
+        left.pack(side="left", fill="y")
 
-        botoes = ttk.Frame(esquerda)
-        botoes.pack(fill="x", pady=(0, 8))
-        self.botoes = [
-            ttk.Button(botoes, text="Executar", command=self.executar),
-            ttk.Button(botoes, text="Sortear tudo", command=self._sortear_tudo),
-            ttk.Button(botoes, text="Fixar valores", command=self._fixar_valores),
-            ttk.Button(botoes, text="Padrões", command=self._padroes),
+        buttons = ttk.Frame(left)
+        buttons.pack(fill="x", pady=(0, 8))
+        self.buttons = [
+            ttk.Button(buttons, text="Run", command=self.run),
+            ttk.Button(buttons, text="Randomize all", command=self._randomize_all),
+            ttk.Button(buttons, text="Lock values", command=self._lock_values),
+            ttk.Button(buttons, text="Defaults", command=self._defaults),
         ]
-        for b in self.botoes:
+        for b in self.buttons:
             b.pack(side="left", padx=2)
 
-        self.abas = ttk.Notebook(esquerda)
-        self.abas.pack(fill="y", expand=True)
+        self.tabs = ttk.Notebook(left)
+        self.tabs.pack(fill="y", expand=True)
 
-        aba = ttk.Frame(self.abas, padding=8)
-        self.abas.add(aba, text="Exibir")
-        for i, (chave, rotulo, padrao) in enumerate(EXIBIR):
-            self.exibir[chave] = tk.BooleanVar(value=padrao)
-            ttk.Checkbutton(aba, text=rotulo, variable=self.exibir[chave],
-                            command=self._ao_mudar_exibicao).grid(row=i, column=0, sticky="w", pady=2)
+        tab = ttk.Frame(self.tabs, padding=8)
+        self.tabs.add(tab, text="Display")
+        for i, (key, label, default) in enumerate(DISPLAY):
+            self.display[key] = tk.BooleanVar(value=default)
+            ttk.Checkbutton(tab, text=label, variable=self.display[key],
+                            command=self._on_display_change).grid(row=i, column=0, sticky="w", pady=2)
 
-        for nome, parametros in SECOES:
-            self._montar_aba(nome, parametros)
+        for name, parameters in SECTIONS:
+            self._build_tab(name, parameters)
 
         self.status = tk.StringVar(value="")
-        ttk.Label(esquerda, textvariable=self.status, wraplength=320).pack(anchor="w", pady=(8, 0))
+        ttk.Label(left, textvariable=self.status, wraplength=320).pack(anchor="w", pady=(8, 0))
 
-    def _montar_aba(self, nome, parametros):
-        aba = ttk.Frame(self.abas, padding=8)
-        self.abas.add(aba, text=nome)
-        for col, titulo in enumerate(["parâmetro", "valor", "aleatório", "faixa"]):
-            ttk.Label(aba, text=titulo, foreground="gray").grid(row=0, column=col, sticky="w", padx=4)
+    def _build_tab(self, name, parameters):
+        tab = ttk.Frame(self.tabs, padding=8)
+        self.tabs.add(tab, text=name)
+        for col, title in enumerate(["parameter", "value", "random", "range"]):
+            ttk.Label(tab, text=title, foreground="gray").grid(row=0, column=col, sticky="w", padx=4)
 
-        for i, (chave, rotulo, padrao, tipo, faixa) in enumerate(parametros, start=1):
-            ttk.Label(aba, text=rotulo).grid(row=i, column=0, sticky="w", padx=4, pady=2)
-            self.vars[chave] = tk.StringVar(value=str(padrao))
-            if isinstance(faixa, list):
-                campo = ttk.Combobox(aba, textvariable=self.vars[chave], width=11, state="readonly",
-                                     values=[str(o) for o in faixa])
-                texto_faixa = "opções"
+        for i, (key, label, default, kind, value_range) in enumerate(parameters, start=1):
+            ttk.Label(tab, text=label).grid(row=i, column=0, sticky="w", padx=4, pady=2)
+            self.vars[key] = tk.StringVar(value=str(default))
+            if isinstance(value_range, list):
+                field = ttk.Combobox(tab, textvariable=self.vars[key], width=11, state="readonly",
+                                     values=[str(o) for o in value_range])
+                range_text = "options"
             else:
-                campo = ttk.Entry(aba, textvariable=self.vars[chave], width=12)
-                campo.bind("<Return>", lambda e: self.executar())
-                texto_faixa = f"{faixa[0]} – {faixa[1]}"
-            campo.grid(row=i, column=1, padx=4)
-            self.widgets[chave] = campo
+                field = ttk.Entry(tab, textvariable=self.vars[key], width=12)
+                field.bind("<Return>", lambda e: self.run())
+                range_text = f"{value_range[0]} – {value_range[1]}"
+            field.grid(row=i, column=1, padx=4)
+            self.widgets[key] = field
 
-            self.aleatorio[chave] = tk.BooleanVar(value=False)
-            ttk.Checkbutton(aba, variable=self.aleatorio[chave],
-                            command=lambda c=chave: self._atualizar_estado(c)).grid(row=i, column=2)
-            ttk.Label(aba, text=texto_faixa, foreground="gray").grid(row=i, column=3, sticky="w", padx=4)
+            self.random[key] = tk.BooleanVar(value=False)
+            ttk.Checkbutton(tab, variable=self.random[key],
+                            command=lambda c=key: self._update_state(c)).grid(row=i, column=2)
+            ttk.Label(tab, text=range_text, foreground="gray").grid(row=i, column=3, sticky="w", padx=4)
 
-    def _montar_grafico(self):
-        direita = ttk.Frame(self.raiz, padding=8)
-        direita.pack(side="left", fill="both", expand=True)
+    def _build_plot(self):
+        right = ttk.Frame(self.root, padding=8)
+        right.pack(side="left", fill="both", expand=True)
 
         self.fig = Figure(figsize=(7, 6), dpi=100)
         self.ax = self.fig.add_subplot(111)
-        self.canvas = FigureCanvasTkAgg(self.fig, master=direita)
-        barra = NavigationToolbar2Tk(self.canvas, direita, pack_toolbar=False)
-        barra.pack(side="top", fill="x")
+        self.canvas = FigureCanvasTkAgg(self.fig, master=right)
+        toolbar = NavigationToolbar2Tk(self.canvas, right, pack_toolbar=False)
+        toolbar.pack(side="top", fill="x")
 
-        self.texto = tk.Text(direita, height=7, font="TkFixedFont", state="disabled")
-        self.texto.pack(side="bottom", fill="x", pady=(8, 0))
+        self.text = tk.Text(right, height=7, font="TkFixedFont", state="disabled")
+        self.text.pack(side="bottom", fill="x", pady=(8, 0))
         self.canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
 
-    # ---------- ações dos botões ----------
-    def _atualizar_estado(self, chave):
-        self.widgets[chave].state(["disabled"] if self.aleatorio[chave].get() else ["!disabled"])
+    # ---------- button actions ----------
+    def _update_state(self, key):
+        self.widgets[key].state(["disabled"] if self.random[key].get() else ["!disabled"])
 
-    def _sortear_tudo(self):
-        for chave in self.aleatorio:
-            self.aleatorio[chave].set(True)
-            self._atualizar_estado(chave)
-        self.executar()
+    def _randomize_all(self):
+        for key in self.random:
+            self.random[key].set(True)
+            self._update_state(key)
+        self.run()
 
-    def _fixar_valores(self):
-        for chave in self.aleatorio:
-            self.aleatorio[chave].set(False)
-            self._atualizar_estado(chave)
+    def _lock_values(self):
+        for key in self.random:
+            self.random[key].set(False)
+            self._update_state(key)
 
-    def _padroes(self):
-        for chave, (_, padrao, _, _) in PARAMETROS.items():
-            self.vars[chave].set(str(padrao))
-            self.aleatorio[chave].set(False)
-            self._atualizar_estado(chave)
-        self.executar()
+    def _defaults(self):
+        for key, (_, default, _, _) in PARAMETERS.items():
+            self.vars[key].set(str(default))
+            self.random[key].set(False)
+            self._update_state(key)
+        self.run()
 
-    def _ao_mudar_exibicao(self):
-        """Só recalcula se o que foi ligado ainda não foi calculado."""
-        r = self.resultado
-        faltando = r is None
+    def _on_display_change(self):
+        """Only recomputes if what was turned on has not been computed yet."""
+        r = self.result
+        missing = r is None
         if r is not None:
-            for chave in ("pf", "astar"):
-                if self.exibir[chave].get() and chave not in r["planos"]:
-                    faltando = True
-            if self.exibir["percorrido"].get():
-                if any("trajetoria" not in info for info in r["planos"].values()):
-                    faltando = True
-            if self.exibir["grade"].get() and r["mapa"] is None:
-                faltando = True
-        if faltando:
-            self.executar()
+            for key in ("pf", "astar"):
+                if self.display[key].get() and key not in r["plans"]:
+                    missing = True
+            if self.display["driven"].get():
+                if any("trajectory" not in info for info in r["plans"].values()):
+                    missing = True
+            if self.display["grid"].get() and r["grid"] is None:
+                missing = True
+        if missing:
+            self.run()
         else:
-            self.redesenhar()
+            self.redraw()
 
-    # ---------- leitura dos parâmetros ----------
-    def _ler_parametros(self):
+    # ---------- reading the parameters ----------
+    def _read_parameters(self):
         p = {}
-        for chave, (rotulo, _, tipo, faixa) in PARAMETROS.items():
-            if self.aleatorio[chave].get():
-                valor = sortear(tipo, faixa, self.rng)
-                self.vars[chave].set(str(valor))      # mostra o valor sorteado
+        for key, (label, _, kind, value_range) in PARAMETERS.items():
+            if self.random[key].get():
+                value = draw_value(kind, value_range, self.rng)
+                self.vars[key].set(str(value))      # shows the drawn value
             else:
-                texto = self.vars[chave].get().strip().replace(",", ".")
+                text = self.vars[key].get().strip().replace(",", ".")
                 try:
-                    valor = int(float(texto)) if tipo is int else tipo(texto)
+                    value = int(float(text)) if kind is int else kind(text)
                 except ValueError:
-                    raise ValueError(f"Valor inválido em '{rotulo}': {texto!r}")
-            p[chave] = valor
+                    raise ValueError(f"Invalid value in '{label}': {text!r}")
+            p[key] = value
 
-        if p["raio_max"] < p["raio_min"]:
-            p["raio_min"], p["raio_max"] = p["raio_max"], p["raio_min"]
-            self.vars["raio_min"].set(str(p["raio_min"]))
-            self.vars["raio_max"].set(str(p["raio_max"]))
-        for chave in ("passo", "res", "max_iter", "v_max", "massa", "inercia", "espaco_pontos", "raio_aceite"):
-            if p[chave] <= 0:
-                raise ValueError(f"'{PARAMETROS[chave][0]}' precisa ser maior que zero.")
-        for chave in ("inicio_x", "inicio_y", "objetivo_x", "objetivo_y"):
-            if not 0 <= p[chave] <= 10:
-                raise ValueError(f"'{PARAMETROS[chave][0]}' precisa estar entre 0 e 10.")
+        if p["max_radius"] < p["min_radius"]:
+            p["min_radius"], p["max_radius"] = p["max_radius"], p["min_radius"]
+            self.vars["min_radius"].set(str(p["min_radius"]))
+            self.vars["max_radius"].set(str(p["max_radius"]))
+        for key in ("step", "res", "max_iter", "v_max", "mass", "inertia", "waypoint_spacing", "accept_radius"):
+            if p[key] <= 0:
+                raise ValueError(f"'{PARAMETERS[key][0]}' must be greater than zero.")
+        for key in ("start_x", "start_y", "goal_x", "goal_y"):
+            if not 0 <= p[key] <= 10:
+                raise ValueError(f"'{PARAMETERS[key][0]}' must be between 0 and 10.")
         return p
 
-    # ---------- execução (thread) ----------
-    def executar(self):
-        if self.ocupado:
+    # ---------- execution (thread) ----------
+    def run(self):
+        if self.busy:
             return
         try:
-            p = self._ler_parametros()
+            p = self._read_parameters()
         except ValueError as e:
             self.status.set(str(e))
             return
 
-        pedido = dict(usar_pf=self.exibir["pf"].get(), usar_astar=self.exibir["astar"].get(),
-                      com_pid=self.exibir["percorrido"].get(), com_grade=self.exibir["grade"].get())
-        self.ocupado = True
-        for b in self.botoes:
+        request = dict(use_pf=self.display["pf"].get(), use_astar=self.display["astar"].get(),
+                       with_pid=self.display["driven"].get(), with_grid=self.display["grid"].get())
+        self.busy = True
+        for b in self.buttons:
             b.state(["disabled"])
-        self.status.set("Calculando...")
+        self.status.set("Computing...")
 
-        def trabalho():
+        def job():
             try:
-                self.fila.put(("ok", calcular(p, **pedido)))
-            except Exception as e:                     # mostra o erro na interface
-                self.fila.put(("erro", f"{type(e).__name__}: {e}"))
+                self.queue.put(("ok", compute(p, **request)))
+            except Exception as e:                     # shows the error in the interface
+                self.queue.put(("error", f"{type(e).__name__}: {e}"))
 
-        threading.Thread(target=trabalho, daemon=True).start()
-        self.raiz.after(100, self._verificar)
+        threading.Thread(target=job, daemon=True).start()
+        self.root.after(100, self._poll)
 
-    def _verificar(self):
+    def _poll(self):
         try:
-            tipo, dado = self.fila.get_nowait()
+            kind, data = self.queue.get_nowait()
         except queue.Empty:
-            self.raiz.after(100, self._verificar)
+            self.root.after(100, self._poll)
             return
-        self.ocupado = False
-        for b in self.botoes:
+        self.busy = False
+        for b in self.buttons:
             b.state(["!disabled"])
-        if tipo == "ok":
-            self.resultado = dado
-            self.status.set(f"Pronto. semente = {dado['params']['semente']}")
-            self.redesenhar()
+        if kind == "ok":
+            self.result = data
+            self.status.set(f"Done. seed = {data['params']['seed']}")
+            self.redraw()
         else:
-            self.status.set(f"Erro: {dado}")
+            self.status.set(f"Error: {data}")
 
-    # ---------- desenho ----------
-    def redesenhar(self):
-        r = self.resultado
+    # ---------- drawing ----------
+    def redraw(self):
+        r = self.result
         if r is None:
             return
         p, ax = r["params"], self.ax
         ax.clear()
 
-        if self.exibir["grade"].get() and r["mapa"] is not None:
+        if self.display["grid"].get() and r["grid"] is not None:
             m = p["res"] / 2
-            ax.imshow(r["mapa"] == OBSTACULO, origin="lower", extent=(-m, 10 + m, -m, 10 + m),
+            ax.imshow(r["grid"] == OBSTACLE, origin="lower", extent=(-m, 10 + m, -m, 10 + m),
                       cmap="Greys", alpha=0.45)
-        if self.exibir["obstaculos"].get():
-            for centro, raio in r["obstaculos"]:
-                ax.add_patch(Circle(centro, raio, fill=True, color="gray", alpha=0.7))
-        if self.exibir["influencia"].get():
-            for centro, raio in r["obstaculos"]:
-                ax.add_patch(Circle(centro, raio + p["rho_0"], fill=False, ls="--",
-                                         color="gray", alpha=0.5))
+        if self.display["obstacles"].get():
+            for center, radius in r["obstacles"]:
+                ax.add_patch(Circle(center, radius, fill=True, color="gray", alpha=0.7))
+        if self.display["influence"].get():
+            for center, radius in r["obstacles"]:
+                ax.add_patch(Circle(center, radius + p["rho_0"], fill=False, ls="--",
+                                    color="gray", alpha=0.5))
 
-        for chave, info in r["planos"].items():
-            if not self.exibir[chave].get():
+        for key, info in r["plans"].items():
+            if not self.display[key].get():
                 continue
-            claro, escuro = CORES[chave]
-            nome = NOMES[chave] + ("" if info["ok"] else " (FALHOU)")
-            if self.exibir["planejado"].get():
-                c = info["caminho"]
-                ax.plot(c[:, 0], c[:, 1], "--", color=claro, lw=1.6,
-                        label=f"{nome}: planejado, sem PID (L={info['L_plano']:.2f})")
-            if self.exibir["percorrido"].get() and "trajetoria" in info:
-                t = info["trajetoria"]
-                ax.plot(t[:, 0], t[:, 1], "-", color=escuro, lw=2.2,
-                        label=f"{nome}: percorrido, com PID (L={info['L_real']:.2f})")
-                if self.exibir["pontos"].get():
-                    ax.plot(info["pontos"][:, 0], info["pontos"][:, 1], ".", color=escuro, markersize=5)
+            light, dark = COLORS[key]
+            name = NAMES[key] + ("" if info["ok"] else " (FAILED)")
+            if self.display["planned"].get():
+                c = info["path"]
+                ax.plot(c[:, 0], c[:, 1], "--", color=light, lw=1.6,
+                        label=f"{name}: planned, without PID (L={info['L_plan']:.2f})")
+            if self.display["driven"].get() and "trajectory" in info:
+                t = info["trajectory"]
+                ax.plot(t[:, 0], t[:, 1], "-", color=dark, lw=2.2,
+                        label=f"{name}: driven, with PID (L={info['L_real']:.2f})")
+                if self.display["points"].get():
+                    ax.plot(info["points"][:, 0], info["points"][:, 1], ".", color=dark, markersize=5)
 
-        ax.plot(*r["inicio"], "go", markersize=10, label="início")
-        ax.plot(*r["objetivo"], "r*", markersize=15, label="objetivo")
+        ax.plot(*r["start"], "go", markersize=10, label="start")
+        ax.plot(*r["goal"], "r*", markersize=15, label="goal")
         ax.set_aspect("equal")
         ax.set_xlim(-1, 11)
         ax.set_ylim(-1, 11)
         ax.grid(alpha=0.2)
-        ax.set_title(f"semente = {p['semente']}")
+        ax.set_title(f"seed = {p['seed']}")
         if ax.get_legend_handles_labels()[0]:
             ax.legend(loc="upper left", fontsize=8)
         self.fig.tight_layout()
         self.canvas.draw_idle()
-        self._escrever_metricas()
+        self._write_metrics()
 
-    def _escrever_metricas(self):
-        linhas = [f"{'':<18}{'plano ok':>9}{'L plan.':>9}{'L real':>8}{'erro máx':>10}"
-                  f"{'chegou':>8}{'colisão':>9}{'plan. (ms)':>11}"]
-        for chave, info in self.resultado["planos"].items():
-            if not self.exibir[chave].get():
+    def _write_metrics(self):
+        lines = [f"{'':<18}{'plan ok':>9}{'L plan':>9}{'L real':>8}{'max err':>10}"
+                 f"{'reached':>9}{'collision':>11}{'plan (ms)':>11}"]
+        for key, info in self.result["plans"].items():
+            if not self.display[key].get():
                 continue
-            linha = f"{NOMES[chave]:<18}{str(info['ok']):>9}{info['L_plano']:>9.2f}"
-            if "trajetoria" in info:
-                linha += (f"{info['L_real']:>8.2f}{info['erro'].max():>10.2f}{str(info['chegou']):>8}"
-                          f"{('SIM' if info['bateu'] else 'não'):>9}")
+            line = f"{NAMES[key]:<18}{str(info['ok']):>9}{info['L_plan']:>9.2f}"
+            if "trajectory" in info:
+                line += (f"{info['L_real']:>8.2f}{info['error'].max():>10.2f}{str(info['reached']):>9}"
+                         f"{('YES' if info['hit'] else 'no'):>11}")
             else:
-                linha += f"{'-':>8}{'-':>10}{'-':>8}{'-':>9}"
-            linha += f"{info['t_plano'] * 1e3:>11.1f}"
-            linhas.append(linha)
-        self.texto.configure(state="normal")
-        self.texto.delete("1.0", "end")
-        self.texto.insert("1.0", "\n".join(linhas))
-        self.texto.configure(state="disabled")
+                line += f"{'-':>8}{'-':>10}{'-':>9}{'-':>11}"
+            line += f"{info['t_plan'] * 1e3:>11.1f}"
+            lines.append(line)
+        self.text.configure(state="normal")
+        self.text.delete("1.0", "end")
+        self.text.insert("1.0", "\n".join(lines))
+        self.text.configure(state="disabled")
 
-    def _fechar(self):
-        self.raiz.quit()
-        self.raiz.destroy()
+    def _close(self):
+        self.root.quit()
+        self.root.destroy()
 
 
 def main():
-    raiz = tk.Tk()
-    raiz.geometry("1300x820")
-    App(raiz)
-    raiz.mainloop()
+    root = tk.Tk()
+    root.geometry("1300x820")
+    App(root)
+    root.mainloop()
 
 
 if __name__ == "__main__":

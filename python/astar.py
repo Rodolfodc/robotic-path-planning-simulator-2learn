@@ -1,42 +1,42 @@
-"""Algoritmo A* em grade 2D, sem dependencia de interface grafica.
+"""A* algorithm on a 2D grid, with no dependency on a graphical interface.
 
-Uso em outros scripts:
+Usage from other scripts:
 
     import numpy as np
-    from astar import a_estrela, OBSTACULO, manhattan
+    from astar import a_star, OBSTACLE, manhattan
 
-    mapa = np.ones((8, 8))            # peso de travessia de cada celula
-    mapa[3, 2:6] = OBSTACULO          # mapa[y, x] = mapa[linha, coluna]
-    mapa[5, :] = 2.0                  # faixa de terreno mais caro
-    caminho, custo = a_estrela(mapa, inicio=(0, 0), objetivo=(7, 7))
-    caminho, custo = a_estrela(mapa, (0, 0), (7, 7), distancia=manhattan)
-    # caminho = [(x, y), ...] do inicio ao objetivo; (None, None) se nao houver
+    grid = np.ones((8, 8))            # traversal weight of each cell
+    grid[3, 2:6] = OBSTACLE           # grid[y, x] = grid[row, column]
+    grid[5, :] = 2.0                  # strip of more expensive terrain
+    path, cost = a_star(grid, start=(0, 0), goal=(7, 7))
+    path, cost = a_star(grid, (0, 0), (7, 7), distance=manhattan)
+    # path = [(x, y), ...] from start to goal; (None, None) if there is none
 
-Convencoes:
-- Coordenadas (x, y) = (coluna, linha), base 0, e o mapa e indexado mapa[y, x].
-- Cada celula guarda seu peso de travessia (>= 0). Celulas iguais a
-  OBSTACULO (-1) ou infinitas (np.inf) sao bloqueadas.
-- Conectividade-8.
-- Custo do passo = distancia(atual, vizinha) * peso da vizinha.
-- Heuristica     = distancia(vizinha, objetivo) * menor peso livre do mapa.
-  Com uma metrica (desigualdade triangular valida), essa heuristica e
-  consistente e o caminho retornado e otimo.
+Conventions:
+- Coordinates (x, y) = (column, row), 0-based, and the grid is indexed grid[y, x].
+- Each cell stores its traversal weight (>= 0). Cells equal to
+  OBSTACLE (-1) or infinite (np.inf) are blocked.
+- 8-connectivity.
+- Step cost = distance(current, neighbor) * neighbor weight.
+- Heuristic = distance(neighbor, goal) * smallest free weight in the grid.
+  With a metric (triangle inequality holds), this heuristic is
+  consistent and the returned path is optimal.
 """
 
 import numpy as np
 
-OBSTACULO = -1
+OBSTACLE = -1
 
-# Colunas da tabela Abertas
-PERTENCE, X_PAI, Y_PAI, X, Y, G, F = range(7)
+# Columns of the Open table
+IS_OPEN, X_PARENT, Y_PARENT, X, Y, G, F = range(7)
 
 
 # ------------------------------------------------------------------------
-# Metricas de distancia (estrategias). Qualquer funcao d(a, b) que seja uma
-# metrica serve. Nao use distancias que violem a desigualdade triangular
-# (ex.: euclidiana ao quadrado): a heuristica superestima e perde o otimo.
+# Distance metrics (strategies). Any function d(a, b) that is a metric
+# works. Do not use distances that violate the triangle inequality
+# (e.g. squared Euclidean): the heuristic overestimates and loses optimality.
 # ------------------------------------------------------------------------
-def euclidiana(a, b):
+def euclidean(a, b):
     return float(np.hypot(a[0] - b[0], a[1] - b[1]))
 
 
@@ -48,121 +48,121 @@ def chebyshev(a, b):
     return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
 
 
-def a_estrela(mapa, inicio, objetivo, distancia=euclidiana, ao_evento=None):
-    """Busca o caminho de menor custo de `inicio` a `objetivo` com A*.
+def a_star(grid, start, goal, distance=euclidean, on_event=None):
+    """Finds the lowest-cost path from `start` to `goal` with A*.
 
-    Parametros
+    Parameters
     ----------
-    mapa : array NL x NC
-        Peso de travessia de cada celula; OBSTACULO ou np.inf = bloqueada.
-    inicio, objetivo : tupla (x, y)
-        Coordenadas em base 0.
-    distancia : funcao d(a, b) -> float
-        Metrica usada no custo do passo e na heuristica. Padrao: euclidiana.
-    ao_evento : funcao opcional
-        Chamada a cada passo, para quem quiser visualizar a busca:
-            ao_evento('aberta', x, y, F)                celula nova em Abertas
-            ao_evento('atualizada', x, y, F, F_antigo)  caminho melhor encontrado
-            ao_evento('expandida', x, y, abertas)       nova celula atual
-        `abertas` e uma copia da tabela Abertas (colunas PERTENCE..F).
+    grid : array NR x NC
+        Traversal weight of each cell; OBSTACLE or np.inf = blocked.
+    start, goal : tuple (x, y)
+        0-based coordinates.
+    distance : function d(a, b) -> float
+        Metric used for the step cost and the heuristic. Default: euclidean.
+    on_event : optional function
+        Called at every step, for anyone who wants to visualize the search:
+            on_event('opened', x, y, F)              new cell in Open
+            on_event('updated', x, y, F, old_F)      better path found
+            on_event('expanded', x, y, open_table)   new current cell
+        `open_table` is a copy of the Open table (columns IS_OPEN..F).
 
-    Retorna
+    Returns
     -------
-    (caminho, custo) : (lista de (x, y), float) ou (None, None) se nao ha caminho.
+    (path, cost) : (list of (x, y), float) or (None, None) if there is no path.
     """
-    mapa = np.asarray(mapa, dtype=float)
-    NL, NC = mapa.shape
-    xIni, yIni = inicio
-    xObj, yObj = objetivo
-    notificar = ao_evento or (lambda *args: None)
+    grid = np.asarray(grid, dtype=float)
+    NR, NC = grid.shape
+    xStart, yStart = start
+    xGoal, yGoal = goal
+    notify = on_event or (lambda *args: None)
 
-    bloqueada = (mapa == OBSTACULO) | np.isinf(mapa)
-    if np.any(mapa[~bloqueada] < 0):
-        raise ValueError('Pesos negativos invalidam o A*. Use OBSTACULO ou np.inf para bloqueio.')
+    blocked = (grid == OBSTACLE) | np.isinf(grid)
+    if np.any(grid[~blocked] < 0):
+        raise ValueError('Negative weights invalidate A*. Use OBSTACLE or np.inf for blocking.')
 
-    # Limite inferior do peso: a heuristica supoe o terreno mais barato ate o fim
-    livres = mapa[~bloqueada]
-    peso_min = float(livres.min()) if livres.size else 0.0
+    # Lower bound of the weight: the heuristic assumes the cheapest terrain until the end
+    free = grid[~blocked]
+    min_weight = float(free.min()) if free.size else 0.0
 
     def h(x, y):
-        return distancia((x, y), (xObj, yObj)) * peso_min
+        return distance((x, y), (xGoal, yGoal)) * min_weight
 
-    # Celula inicial: g = 0 e F = 0
-    xAtual, yAtual = xIni, yIni
-    CustoIni2Atual = 0.0
+    # Initial cell: g = 0 and F = 0
+    xCur, yCur = xStart, yStart
+    CostStart2Cur = 0.0
 
-    # Abertas: [ Pertence xPai yPai x y g F ]
-    # Pertence = 1: ainda a explorar; 0: ja expandida
-    Abertas = np.array([[0, xAtual, yAtual, xAtual, yAtual, 0.0, 0.0]])
+    # Open: [ IsOpen xParent yParent x y g F ]
+    # IsOpen = 1: still to explore; 0: already expanded
+    Open = np.array([[0, xCur, yCur, xCur, yCur, 0.0, 0.0]])
 
-    # Fechadas: celulas bloqueadas + celulas ja expandidas, como [x, y]
-    yObst, xObst = np.nonzero(bloqueada)
-    Fechadas = np.vstack([np.column_stack([xObst, yObst]), [xAtual, yAtual]])
+    # Closed: blocked cells + already expanded cells, as [x, y]
+    yObst, xObst = np.nonzero(blocked)
+    Closed = np.vstack([np.column_stack([xObst, yObst]), [xCur, yCur]])
 
     # ------------------------------------------------------------
-    # Fase de ida: expande celulas ate chegar ao objetivo
+    # Forward phase: expand cells until the goal is reached
     # ------------------------------------------------------------
-    while xAtual != xObj or yAtual != yObj:
+    while xCur != xGoal or yCur != yGoal:
 
-        for dx in (-1, 0, 1):      # eixo X (colunas)
-            for dy in (-1, 0, 1):  # eixo Y (linhas)
+        for dx in (-1, 0, 1):      # X axis (columns)
+            for dy in (-1, 0, 1):  # Y axis (rows)
 
-                xViz = xAtual + dx
-                yViz = yAtual + dy
+                xNb = xCur + dx
+                yNb = yCur + dy
 
-                # Dentro do mapa e fora da lista de fechadas
-                if not (0 <= xViz < NC and 0 <= yViz < NL):
+                # Inside the grid and not in the closed list
+                if not (0 <= xNb < NC and 0 <= yNb < NR):
                     continue
-                if np.any((Fechadas[:, 0] == xViz) & (Fechadas[:, 1] == yViz)):
+                if np.any((Closed[:, 0] == xNb) & (Closed[:, 1] == yNb)):
                     continue
 
-                passo = distancia((xAtual, yAtual), (xViz, yViz)) * mapa[yViz, xViz]
-                g = CustoIni2Atual + passo
-                f = g + h(xViz, yViz)
+                step = distance((xCur, yCur), (xNb, yNb)) * grid[yNb, xNb]
+                g = CostStart2Cur + step
+                f = g + h(xNb, yNb)
 
-                naLista = (Abertas[:, X] == xViz) & (Abertas[:, Y] == yViz)
-                if np.sum(naLista) == 1:
-                    # Ja esta em Abertas: atualiza se o novo F for menor
-                    indAb = np.flatnonzero(naLista)[0]
-                    if Abertas[indAb, F] > f:
-                        F_antigo = Abertas[indAb, F]
-                        Abertas[indAb, [X_PAI, Y_PAI, G, F]] = [xAtual, yAtual, g, f]
-                        notificar('atualizada', xViz, yViz, f, F_antigo)
+                inList = (Open[:, X] == xNb) & (Open[:, Y] == yNb)
+                if np.sum(inList) == 1:
+                    # Already in Open: update if the new F is smaller
+                    idxOpen = np.flatnonzero(inList)[0]
+                    if Open[idxOpen, F] > f:
+                        old_F = Open[idxOpen, F]
+                        Open[idxOpen, [X_PARENT, Y_PARENT, G, F]] = [xCur, yCur, g, f]
+                        notify('updated', xNb, yNb, f, old_F)
                 else:
-                    # Nova possibilidade a explorar
-                    Abertas = np.vstack([Abertas, [1, xAtual, yAtual, xViz, yViz, g, f]])
-                    notificar('aberta', xViz, yViz, f)
+                    # New possibility to explore
+                    Open = np.vstack([Open, [1, xCur, yCur, xNb, yNb, g, f]])
+                    notify('opened', xNb, yNb, f)
 
-        # Celulas de Abertas ainda nao exploradas
-        Livres = np.flatnonzero(Abertas[:, PERTENCE] == 1)
-        if Livres.size == 0:
-            return None, None  # Todas as celulas analisadas: nao existe caminho
+        # Cells in Open not yet explored
+        Unexplored = np.flatnonzero(Open[:, IS_OPEN] == 1)
+        if Unexplored.size == 0:
+            return None, None  # All cells analyzed: there is no path
 
-        # Menor F; em empate, o primeiro da lista
-        IndMinF = Livres[np.argmin(Abertas[Livres, F])]
-        xAtual = int(Abertas[IndMinF, X])
-        yAtual = int(Abertas[IndMinF, Y])
-        CustoIni2Atual = Abertas[IndMinF, G]
-        Fechadas = np.vstack([Fechadas, [xAtual, yAtual]])
-        Abertas[IndMinF, PERTENCE] = 0
+        # Smallest F; on a tie, the first in the list
+        IdxMinF = Unexplored[np.argmin(Open[Unexplored, F])]
+        xCur = int(Open[IdxMinF, X])
+        yCur = int(Open[IdxMinF, Y])
+        CostStart2Cur = Open[IdxMinF, G]
+        Closed = np.vstack([Closed, [xCur, yCur]])
+        Open[IdxMinF, IS_OPEN] = 0
 
-        notificar('expandida', xAtual, yAtual, Abertas.copy())
+        notify('expanded', xCur, yCur, Open.copy())
 
     # ------------------------------------------------------------
-    # Fase de volta: do objetivo ao inicio seguindo os pais
+    # Backward phase: from the goal back to the start following the parents
     # ------------------------------------------------------------
-    def ultimo_expandido(x, y):
-        idx = np.flatnonzero((Abertas[:, X] == x) & (Abertas[:, Y] == y)
-                             & (Abertas[:, PERTENCE] == 0))
+    def last_expanded(x, y):
+        idx = np.flatnonzero((Open[:, X] == x) & (Open[:, Y] == y)
+                             & (Open[:, IS_OPEN] == 0))
         return idx[-1]
 
-    custo = float(Abertas[ultimo_expandido(xObj, yObj), G])
-    caminho = [(xObj, yObj)]
-    x, y = xObj, yObj
-    while x != xIni or y != yIni:
-        ind = ultimo_expandido(x, y)
-        x, y = int(Abertas[ind, X_PAI]), int(Abertas[ind, Y_PAI])
-        caminho.append((x, y))
-    caminho.reverse()
+    cost = float(Open[last_expanded(xGoal, yGoal), G])
+    path = [(xGoal, yGoal)]
+    x, y = xGoal, yGoal
+    while x != xStart or y != yStart:
+        ind = last_expanded(x, y)
+        x, y = int(Open[ind, X_PARENT]), int(Open[ind, Y_PARENT])
+        path.append((x, y))
+    path.reverse()
 
-    return caminho, custo
+    return path, cost

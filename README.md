@@ -1,60 +1,60 @@
-# Planejadores de caminho
+# Path planners
 
-Compara dois jeitos de ir do início ao objetivo entre obstáculos circulares aleatórios, e mostra como um robô com inércia, guiado por PID, segue cada caminho.
+Compares two ways of getting from start to goal among random circular obstacles, and shows how a robot with inertia, driven by PID, follows each path.
 
-- **A\*** busca na grade e acha o menor caminho.
-- **Campos potenciais** descem um gradiente: o objetivo atrai, os obstáculos repelem. É rápido, mas pode travar num mínimo local.
-- **PID** faz o robô obedecer ao caminho planejado, com massa, inércia e limites de motor.
+- **A\*** searches the grid and finds the shortest path.
+- **Potential fields** descend a gradient: the goal attracts, the obstacles repel. It is fast, but it can get stuck in a local minimum.
+- **PID** makes the robot track the planned path, with mass, inertia and motor limits.
 
-## Ver online
+## View online
 
 **https://rodolfodc.github.io/robotic-path-planning-simulator-2learn/**
 
-Não precisa instalar nada. Troque qualquer parâmetro e o resultado é recalculado na hora. Cada parâmetro mostra a que algoritmo pertence e uma explicação ao passar o mouse, e pode ser marcado como **aleatório** para ser sorteado a cada execução.
+Nothing to install. Change any parameter and the result is recomputed instantly. Each parameter shows which algorithm it belongs to and an explanation on hover, and can be marked as **random** to be drawn on every run.
 
-![Caminho planejado (tracejado) e percorrido com PID (contínuo)](docs/follow_path.png)
+![Planned path (dashed) and path driven with PID (solid)](docs/follow_path.png)
 
-## Rodar o código Python
+## Run the Python code
 
 ```bash
 pip install -r python/requirements.txt
 cd python
-python compare_planners.py 2      # compara os dois planejadores (semente 2)
-python follow_path.py 2           # adiciona o robô com PID seguindo cada caminho
-python potential_fields.py        # só campos potenciais, com o passo a passo das forças
-python pid.py                     # PID sozinho: P, PI e PID num controle de velocidade
-python interface_planners.py      # interface gráfica (Tkinter)
+python compare_planners.py 2      # compares the two planners (seed 2)
+python follow_path.py 2           # adds the PID-driven robot following each path
+python potential_fields.py        # potential fields only, with the step-by-step forces
+python pid.py                     # PID alone: P, PI and PID on a speed controller
+python interface_planners.py      # graphical interface (Tkinter)
 ```
 
-`compare_planners.py` e `follow_path.py` aceitam `--quiet` (silencia o log das forças), e `follow_path.py` aceita também `--sem-janela` (só salva o PNG, sem abrir janela). A semente define o cenário: a mesma semente gera sempre os mesmos obstáculos.
+`compare_planners.py` and `follow_path.py` accept `--quiet` (silences the force log), and `follow_path.py` also accepts `--no-window` (only saves the PNG, without opening a window). The seed defines the scenario: the same seed always generates the same obstacles.
 
-| arquivo | o que faz |
+| file | what it does |
 |---|---|
-| `astar.py` | A\* em grade 2D, sem interface |
-| `potential_fields.py` | campos potenciais: forças, geração de obstáculos, planejamento |
-| `pid.py` | classe `PID` e exemplo de controle de velocidade |
-| `follow_path.py` | robô com inércia seguindo um caminho com dois PIDs |
-| `compare_planners.py` | roda os dois planejadores no mesmo cenário |
-| `interface_planners.py` | interface gráfica com parâmetros e sorteio |
-| `interface_astar.py` | interface interativa do A\* passo a passo (`rodar.sh` abre) |
+| `astar.py` | A\* on a 2D grid, no interface |
+| `potential_fields.py` | potential fields: forces, obstacle generation, planning |
+| `pid.py` | `PID` class and a speed-control example |
+| `follow_path.py` | robot with inertia following a path with two PIDs |
+| `compare_planners.py` | runs both planners on the same scenario |
+| `interface_planners.py` | graphical interface with parameters and random draws |
+| `interface_astar.py` | interactive step-by-step A\* interface (opened by `run.sh`) |
 
-## A página web
+## The web page
 
-A página é uma **reescrita em JavaScript** do motor (`web/engine.js`), para rodar no navegador sem servidor. Duas consequências:
+The page is a **JavaScript rewrite** of the engine (`web/engine.js`), so it runs in the browser without a server. Two consequences:
 
-- Se você mudar os `.py`, a página não acompanha. Os resultados podem divergir até o `engine.js` ser atualizado.
-- O gerador aleatório é outro, então a mesma semente não dá o mesmo cenário no Python e na página.
+- If you change the `.py` files, the page does not follow. Results may diverge until `engine.js` is updated.
+- The random number generator is different, so the same seed does not produce the same scenario in Python and on the page.
 
-Para regenerar o `index.html` depois de editar `web/engine.js` ou `web/template.html`:
+To regenerate `index.html` after editing `web/engine.js` or `web/template.html`:
 
 ```bash
 python web/build.py
 ```
 
-## Publicar no GitHub Pages
+## Publish on GitHub Pages
 
-Em **Settings → Pages**, escolha *Deploy from a branch*, branch `main`, pasta `/ (root)`. O repositório precisa ser público.
+In **Settings → Pages**, choose *Deploy from a branch*, branch `main`, folder `/ (root)`. The repository must be public.
 
-## Licença
+## License
 
-[Apache 2.0](LICENSE). Você pode usar, modificar e distribuir à vontade, inclusive em projetos comerciais, desde que mantenha o aviso de copyright e o arquivo [NOTICE](NOTICE), dando crédito a Rodolfo Dalla Costa.
+[Apache 2.0](LICENSE). You may use, modify and distribute it freely, including in commercial projects, as long as you keep the copyright notice and the [NOTICE](NOTICE) file, giving credit to Rodolfo Dalla Costa.

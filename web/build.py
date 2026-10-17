@@ -1,31 +1,31 @@
-"""Gera o index.html (página única, pronta para o GitHub Pages) a partir de
-engine.js (motor) e template.html (visual).
+"""Generates index.html (single page, ready for GitHub Pages) from
+engine.js (engine) and template.html (visuals).
 
-    python web/build.py            # escreve ../index.html
-    python web/build.py saida.html # escreve também a versão sem <!doctype>
+    python web/build.py              # writes ../index.html
+    python web/build.py output.html  # also writes the version without <!doctype>
 """
 
 import sys
 from pathlib import Path
 
-aqui = Path(__file__).resolve().parent
-motor = (aqui / "engine.js").read_text(encoding="utf-8")
-# o motor entra inline, sem o bloco de exportação usado só no Node
-motor = motor.replace('if (typeof module !== "undefined") module.exports = Engine;', "")
-assert "</script>" not in motor
+here = Path(__file__).resolve().parent
+engine = (here / "engine.js").read_text(encoding="utf-8")
+# the engine goes inline, without the export block used only in Node
+engine = engine.replace('if (typeof module !== "undefined") module.exports = Engine;', "")
+assert "</script>" not in engine
 
-fragmento = (aqui / "template.html").read_text(encoding="utf-8").replace("/*ENGINE*/", motor)
+fragment = (here / "template.html").read_text(encoding="utf-8").replace("/*ENGINE*/", engine)
 
-cabecalho = (
-    '<!doctype html>\n<html lang="pt-BR">\n<meta charset="utf-8">\n'
+header = (
+    '<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n'
     '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
-    '<meta name="description" content="Compara A* e campos potenciais no mesmo cenário aleatório, '
-    'com um robô guiado por PID seguindo cada caminho.">\n'
+    '<meta name="description" content="Compares A* and potential fields on the same random scenario, '
+    'with a PID-driven robot following each path.">\n'
 )
-destino = aqui.parent / "index.html"
-destino.write_text(cabecalho + fragmento, encoding="utf-8")
-print(f"escrito {destino} ({destino.stat().st_size} bytes)")
+target = here.parent / "index.html"
+target.write_text(header + fragment, encoding="utf-8")
+print(f"wrote {target} ({target.stat().st_size} bytes)")
 
 if len(sys.argv) > 1:
-    Path(sys.argv[1]).write_text(fragmento, encoding="utf-8")
-    print(f"escrito {sys.argv[1]}")
+    Path(sys.argv[1]).write_text(fragment, encoding="utf-8")
+    print(f"wrote {sys.argv[1]}")

@@ -1,64 +1,64 @@
-/* Motor dos planejadores: Potential Fields, A* e seguidor com PID.
-   Porta em JavaScript de potential_fields.py, astar.py, pid.py e follow_path.py.
-   Não depende do navegador: roda também no Node (veja o fim do arquivo). */
+/* Planner engine: Potential Fields, A* and PID follower.
+   JavaScript port of potential_fields.py, astar.py, pid.py and follow_path.py.
+   Does not depend on the browser: also runs in Node (see the end of the file). */
 const Engine = (() => {
   // ---------------------------------------------------------------
-  // 1. Parâmetros: [chave, rótulo, padrão, tipo, faixa do sorteio, dica]
-  //    faixa = [mín, máx] para números, ou lista de opções para escolhas.
+  // 1. Parameters: [key, label, default, type, random range, hint]
+  //    range = [min, max] for numbers, or a list of options for choices.
   // ---------------------------------------------------------------
-  const SECOES = [
-    ["Cenário", [
-      ["semente",      "Semente",                2,     "int",   [0, 99999], "Número que define o sorteio dos obstáculos. A mesma semente gera sempre o mesmo cenário."],
-      ["n_obstaculos", "Nº de obstáculos",       4,     "int",   [2, 8],     "Quantos obstáculos circulares tentar colocar. Se não couberem com a folga pedida, aparecem menos."],
-      ["raio_min",     "Raio mínimo",            0.5,   "float", [0.3, 0.8], "Menor raio que um obstáculo pode ter (o mapa vai de 0 a 10)."],
-      ["raio_max",     "Raio máximo",            1.2,   "float", [0.9, 1.5], "Maior raio que um obstáculo pode ter. Se ficar menor que o mínimo, os dois são trocados."],
-      ["folga",        "Folga entre obstáculos", 0.5,   "float", [0.2, 1.0], "Distância mínima entre obstáculos, e deles até o início e o objetivo. Evita cenários sem passagem."],
-      ["inicio_x",     "Início x",               0,     "float", [0, 2],     "Posição horizontal de onde o robô parte (0 a 10)."],
-      ["inicio_y",     "Início y",               0,     "float", [0, 2],     "Posição vertical de onde o robô parte (0 a 10)."],
-      ["objetivo_x",   "Objetivo x",             10,    "float", [8, 10],    "Posição horizontal do destino (0 a 10)."],
-      ["objetivo_y",   "Objetivo y",             10,    "float", [8, 10],    "Posição vertical do destino (0 a 10)."],
-    ], { id: "cenario", chip: "Cenário", nota: "Vale para os dois algoritmos: os dois enfrentam os mesmos obstáculos." }],
+  const SECTIONS = [
+    ["Scenario", [
+      ["seed",        "Seed",                        2,     "int",   [0, 99999], "Number that drives the obstacle draw. The same seed always generates the same scenario."],
+      ["n_obstacles", "No. of obstacles",            4,     "int",   [2, 8],     "How many circular obstacles to try to place. If they do not fit with the requested clearance, fewer appear."],
+      ["min_radius",  "Minimum radius",              0.5,   "float", [0.3, 0.8], "Smallest radius an obstacle can have (the map goes from 0 to 10)."],
+      ["max_radius",  "Maximum radius",              1.2,   "float", [0.9, 1.5], "Largest radius an obstacle can have. If it ends up smaller than the minimum, the two are swapped."],
+      ["clearance",   "Clearance between obstacles", 0.5,   "float", [0.2, 1.0], "Minimum distance between obstacles, and from them to the start and the goal. Avoids scenarios with no way through."],
+      ["start_x",     "Start x",                     0,     "float", [0, 2],     "Horizontal position the robot departs from (0 to 10)."],
+      ["start_y",     "Start y",                     0,     "float", [0, 2],     "Vertical position the robot departs from (0 to 10)."],
+      ["goal_x",      "Goal x",                      10,    "float", [8, 10],    "Horizontal position of the destination (0 to 10)."],
+      ["goal_y",      "Goal y",                      10,    "float", [8, 10],    "Vertical position of the destination (0 to 10)."],
+    ], { id: "scenario", chip: "Scenario", note: "Applies to both algorithms: both face the same obstacles." }],
     ["Potential Fields", [
-      ["k_att",      "Ganho atrativo (k_att)",     1.0,  "float", [0.5, 3],    "Força com que o objetivo puxa o robô. Maior: vai mais direto ao destino, mas passa mais perto dos obstáculos."],
-      ["k_rep",      "Ganho repulsivo (k_rep)",    5.0,  "float", [1, 15],     "Força com que os obstáculos empurram o robô. Maior: mantém mais distância, mas pode travar em passagens estreitas."],
-      ["rho_0",      "Zona de influência (rho_0)", 2.0,  "float", [1, 3],      "Distância da borda do obstáculo até onde ele deixa de repelir. Fora dessa zona a força é zero. Também afasta os obstáculos do início e do objetivo ao sortear o cenário."],
-      ["passo",      "Passo",                      0.05, "float", [0.02, 0.1], "Tamanho de cada passo da descida de gradiente. Pequeno: suave e lento. Grande: rápido, mas pode oscilar ou divergir."],
-      ["tolerancia", "Tolerância ao objetivo",     0.1,  "float", [0.05, 0.2], "A que distância do objetivo o planejador considera que chegou."],
-      ["max_iter",   "Máx. de iterações",          2000, "int",   [500, 4000], "Limite de passos. Se acabar antes de chegar, o planejador falha (provável mínimo local)."],
-    ], { id: "pf", chip: "PF", nota: "Só afeta o Potential Fields. O A* ignora estes parâmetros." }],
+      ["k_att",     "Attractive gain (k_att)",   1.0,  "float", [0.5, 3],    "How strongly the goal pulls the robot. Higher: heads more directly to the destination, but passes closer to the obstacles."],
+      ["k_rep",     "Repulsive gain (k_rep)",    5.0,  "float", [1, 15],     "How strongly the obstacles push the robot. Higher: keeps more distance, but can get stuck in narrow passages."],
+      ["rho_0",     "Influence zone (rho_0)",    2.0,  "float", [1, 3],      "Distance from the obstacle's edge beyond which it stops repelling. Outside this zone the force is zero. It also keeps obstacles away from the start and the goal when drawing the scenario."],
+      ["step",      "Step",                      0.05, "float", [0.02, 0.1], "Size of each gradient descent step. Small: smooth and slow. Large: fast, but can oscillate or diverge."],
+      ["tolerance", "Goal tolerance",            0.1,  "float", [0.05, 0.2], "How close to the goal the planner considers it has arrived."],
+      ["max_iter",  "Max. iterations",           2000, "int",   [500, 4000], "Step limit. If it runs out before arriving, the planner fails (likely a local minimum)."],
+    ], { id: "pf", chip: "PF", note: "Only affects Potential Fields. A* ignores these parameters." }],
     ["A*", [
-      ["res",       "Tamanho da célula",    0.2,         "float", [0.1, 0.2, 0.25, 0.5], "Lado de cada célula da grade. Menor: caminho mais preciso, mas mais células para buscar."],
-      ["margem",    "Margem de segurança",  0.1,         "float", [0, 0.3],              "Folga extra ao redor dos obstáculos ao marcar células como bloqueadas. Maior: caminho mais afastado."],
-      ["distancia", "Métrica de distância", "euclidiana", "str",  ["euclidiana", "manhattan", "chebyshev"], "Como medir o custo de um passo e a distância até o objetivo. Euclidiana: em linha reta. Manhattan: soma dos eixos (diagonal custa 2). Chebyshev: o maior eixo (diagonal custa 1)."],
-    ], { id: "astar", chip: "A*", nota: "Só afeta o A*. O Potential Fields ignora estes parâmetros." }],
-    ["Robô e PID", [
-      ["v_max",         "Velocidade máxima",        1.5, "float", [0.5, 2.5],  "Velocidade de cruzeiro que o PID de velocidade tenta atingir em linha reta. Muito alta, o robô passa dos pontos e corta curvas."],
-      ["espaco_pontos", "Espaço entre pontos-alvo", 0.5, "float", [0.25, 1],   "O caminho planejado é dividido em pontos com esta distância entre si, e o robô vai de um a outro."],
-      ["raio_aceite",   "Raio de aceitação",        0.3, "float", [0.15, 0.5], "A que distância de um ponto-alvo o robô o considera alcançado e passa ao próximo. Maior: corta mais as curvas."],
-      ["massa",         "Massa",                    1.0, "float", [0.5, 2],    "Massa do robô. Maior: mais inércia, acelera e freia mais devagar."],
-      ["inercia",       "Inércia de giro",          0.5, "float", [0.2, 1],    "Resistência a girar. Maior: o robô demora mais para virar e para parar de virar."],
-      ["kp_v",          "Velocidade: Kp",           3.0, "float", [1, 6],      "Proporcional da velocidade: reage ao erro de agora entre a velocidade desejada e a real."],
-      ["ki_v",          "Velocidade: Ki",           0.5, "float", [0, 1],      "Integral da velocidade: acumula o erro ao longo do tempo e elimina a diferença que sobra."],
-      ["kd_v",          "Velocidade: Kd",           0.0, "float", [0, 0.3],    "Derivativo da velocidade: amortece variações rápidas. Valores altos deixam a simulação instável."],
-      ["kp_th",         "Direção: Kp",              4.0, "float", [1, 8],      "Proporcional da direção: quanto o robô gira para cada radiano de erro entre sua direção e a do próximo ponto."],
-      ["ki_th",         "Direção: Ki",              0.0, "float", [0, 0.3],    "Integral da direção: corrige um erro de ângulo que persiste. Normalmente fica em 0."],
-      ["kd_th",         "Direção: Kd",              1.0, "float", [0, 2],      "Derivativo da direção: amortece o giro e evita oscilar em torno da direção certa."],
-    ], { id: "pid", chip: "PID", nota: "Controla o robô que segue o caminho, tanto o do A* quanto o do Potential Fields. Não muda o caminho planejado, só o percorrido." }],
+      ["res",      "Cell size",       0.2,         "float", [0.1, 0.2, 0.25, 0.5], "Side of each grid cell. Smaller: more precise path, but more cells to search."],
+      ["margin",   "Safety margin",   0.1,         "float", [0, 0.3],              "Extra clearance around obstacles when marking cells as blocked. Larger: path stays farther away."],
+      ["distance", "Distance metric", "euclidean", "str",   ["euclidean", "manhattan", "chebyshev"], "How to measure the cost of a step and the distance to the goal. Euclidean: straight line. Manhattan: sum of the axes (a diagonal costs 2). Chebyshev: the largest axis (a diagonal costs 1)."],
+    ], { id: "astar", chip: "A*", note: "Only affects A*. Potential Fields ignores these parameters." }],
+    ["Robot and PID", [
+      ["v_max",            "Maximum speed",            1.5, "float", [0.5, 2.5],  "Cruise speed the speed PID tries to reach on a straight line. Too high and the robot overshoots the points and cuts corners."],
+      ["waypoint_spacing", "Spacing between targets",  0.5, "float", [0.25, 1],   "The planned path is split into points this far apart, and the robot goes from one to the next."],
+      ["accept_radius",    "Acceptance radius",        0.3, "float", [0.15, 0.5], "How close to a target point the robot considers it reached and moves on to the next. Larger: cuts corners more."],
+      ["mass",             "Mass",                     1.0, "float", [0.5, 2],    "Robot mass. Higher: more inertia, accelerates and brakes more slowly."],
+      ["inertia",          "Rotational inertia",       0.5, "float", [0.2, 1],    "Resistance to turning. Higher: the robot takes longer to turn and to stop turning."],
+      ["kp_v",             "Speed: Kp",                3.0, "float", [1, 6],      "Speed proportional term: reacts to the current error between the desired and actual speed."],
+      ["ki_v",             "Speed: Ki",                0.5, "float", [0, 1],      "Speed integral term: accumulates the error over time and removes the remaining offset."],
+      ["kd_v",             "Speed: Kd",                0.0, "float", [0, 0.3],    "Speed derivative term: damps fast changes. High values make the simulation unstable."],
+      ["kp_th",            "Heading: Kp",              4.0, "float", [1, 8],      "Heading proportional term: how much the robot turns for each radian of error between its heading and the direction of the next point."],
+      ["ki_th",            "Heading: Ki",              0.0, "float", [0, 0.3],    "Heading integral term: corrects a persistent angle error. Usually left at 0."],
+      ["kd_th",            "Heading: Kd",              1.0, "float", [0, 2],      "Heading derivative term: damps the turning and avoids oscillating around the right heading."],
+    ], { id: "pid", chip: "PID", note: "Controls the robot that follows the path, both A*'s and Potential Fields'. It does not change the planned path, only the driven one." }],
   ];
 
-  const PARAMETROS = {};
-  for (const [, ps, meta] of SECOES)
-    for (const [c, r, d, t, f, dica] of ps) PARAMETROS[c] = { rotulo: r, padrao: d, tipo: t, faixa: f, dica, secao: meta.id };
+  const PARAMETERS = {};
+  for (const [, ps, meta] of SECTIONS)
+    for (const [k, l, d, t, r, hint] of ps) PARAMETERS[k] = { label: l, defaultValue: d, type: t, range: r, hint, section: meta.id };
 
-  // Constantes da física do robô (não expostas)
-  const DT = 0.05, T_MAX = 80, ATRITO_LIN = 0.5, ATRITO_ANG = 0.5;
-  const FORCA_MAX = 3, TORQUE_MAX = 3, TOL_OBJETIVO = 0.2;
+  // Robot physics constants (not exposed)
+  const DT = 0.05, T_MAX = 80, LIN_FRICTION = 0.5, ANG_FRICTION = 0.5;
+  const MAX_FORCE = 3, MAX_TORQUE = 3, GOAL_TOL = 0.2;
 
   // ---------------------------------------------------------------
-  // 2. Utilidades
+  // 2. Utilities
   // ---------------------------------------------------------------
-  function criarRng(semente) {                       // mulberry32: rápido e reprodutível
-    let a = (semente >>> 0) + 0x6D2B79F5;
+  function createRng(seed) {                         // mulberry32: fast and reproducible
+    let a = (seed >>> 0) + 0x6D2B79F5;
     return () => {
       a = (a + 0x6D2B79F5) >>> 0;
       let t = a;
@@ -68,38 +68,38 @@ const Engine = (() => {
     };
   }
 
-  function sortear(chave, rnd = Math.random) {
-    const { tipo, faixa } = PARAMETROS[chave];
-    if (faixa.length > 2 || tipo === "str") return faixa[Math.floor(rnd() * faixa.length)];
-    const [lo, hi] = faixa;
-    if (tipo === "int") return lo + Math.floor(rnd() * (hi - lo + 1));
+  function draw(key, rnd = Math.random) {
+    const { type, range } = PARAMETERS[key];
+    if (range.length > 2 || type === "str") return range[Math.floor(rnd() * range.length)];
+    const [lo, hi] = range;
+    if (type === "int") return lo + Math.floor(rnd() * (hi - lo + 1));
     return Math.round((lo + rnd() * (hi - lo)) * 100) / 100;
   }
 
-  function validar(p) {
-    for (const c of ["passo", "res", "max_iter", "v_max", "massa", "inercia", "espaco_pontos", "raio_aceite"])
-      if (!(p[c] > 0)) return `"${PARAMETROS[c].rotulo}" precisa ser maior que zero.`;
-    for (const c of ["inicio_x", "inicio_y", "objetivo_x", "objetivo_y"])
-      if (!(p[c] >= 0 && p[c] <= 10)) return `"${PARAMETROS[c].rotulo}" precisa estar entre 0 e 10.`;
-    for (const [c, { tipo }] of Object.entries(PARAMETROS))
-      if (tipo !== "str" && !Number.isFinite(p[c])) return `Valor inválido em "${PARAMETROS[c].rotulo}".`;
+  function validate(p) {
+    for (const k of ["step", "res", "max_iter", "v_max", "mass", "inertia", "waypoint_spacing", "accept_radius"])
+      if (!(p[k] > 0)) return `"${PARAMETERS[k].label}" must be greater than zero.`;
+    for (const k of ["start_x", "start_y", "goal_x", "goal_y"])
+      if (!(p[k] >= 0 && p[k] <= 10)) return `"${PARAMETERS[k].label}" must be between 0 and 10.`;
+    for (const [k, { type }] of Object.entries(PARAMETERS))
+      if (type !== "str" && !Number.isFinite(p[k])) return `Invalid value in "${PARAMETERS[k].label}".`;
     return null;
   }
 
   const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-  function comprimento(c) { let s = 0; for (let i = 1; i < c.length; i++) s += dist(c[i - 1], c[i]); return s; }
-  const angulo = (a) => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+  function pathLength(c) { let s = 0; for (let i = 1; i < c.length; i++) s += dist(c[i - 1], c[i]); return s; }
+  const wrapAngle = (a) => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
 
-  function reamostrar(c, espaco) {                   // pontos igualmente espaçados
+  function resample(c, spacing) {                    // evenly spaced points
     const s = [0];
     for (let i = 1; i < c.length; i++) s.push(s[i - 1] + dist(c[i - 1], c[i]));
     const total = s[s.length - 1];
-    const alvos = [];
-    for (let a = espaco; a < total; a += espaco) alvos.push(a);
-    alvos.push(total);
+    const targets = [];
+    for (let a = spacing; a < total; a += spacing) targets.push(a);
+    targets.push(total);
     const out = [];
     let j = 0;
-    for (const a of alvos) {
+    for (const a of targets) {
       while (j < s.length - 2 && s[j + 1] < a) j++;
       const seg = s[j + 1] - s[j];
       const f = seg > 0 ? (a - s[j]) / seg : 0;
@@ -108,100 +108,100 @@ const Engine = (() => {
     return out;
   }
 
-  function distAteSegmento(p, a, b) {
+  function distToSegment(p, a, b) {
     const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
     let t = l2 > 0 ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2 : 0;
     t = Math.max(0, Math.min(1, t));
     return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
   }
 
-  function erroRastreamento(traj, caminho) {         // distância de cada ponto ao caminho planejado
-    const erros = new Float64Array(traj.length);
+  function trackingError(traj, path) {               // distance from each point to the planned path
+    const errors = new Float64Array(traj.length);
     for (let i = 0; i < traj.length; i++) {
       let m = Infinity;
-      for (let j = 1; j < caminho.length; j++) m = Math.min(m, distAteSegmento(traj[i], caminho[j - 1], caminho[j]));
-      erros[i] = caminho.length > 1 ? m : dist(traj[i], caminho[0]);
+      for (let j = 1; j < path.length; j++) m = Math.min(m, distToSegment(traj[i], path[j - 1], path[j]));
+      errors[i] = path.length > 1 ? m : dist(traj[i], path[0]);
     }
-    return erros;
+    return errors;
   }
 
-  const colidiu = (traj, obs) => traj.some((q) => obs.some((o) => dist(q, o.c) < o.r));
+  const collided = (traj, obs) => traj.some((q) => obs.some((o) => dist(q, o.c) < o.r));
 
   // ---------------------------------------------------------------
-  // 3. Cenário
+  // 3. Scenario
   // ---------------------------------------------------------------
-  function gerarObstaculos(p, rnd, ini, obj) {
+  function generateObstacles(p, rnd, start, goal) {
     const obs = [];
-    let tentativas = 0;
-    while (obs.length < p.n_obstaculos && tentativas < 1000) {
-      tentativas++;
+    let attempts = 0;
+    while (obs.length < p.n_obstacles && attempts < 1000) {
+      attempts++;
       const c = [1 + rnd() * 8, 1 + rnd() * 8];
-      const r = p.raio_min + rnd() * (p.raio_max - p.raio_min);
-      if (dist(c, ini) < r + p.rho_0 / 2 + p.folga) continue;
-      if (dist(c, obj) < r + p.rho_0 / 2 + p.folga) continue;
-      if (obs.some((o) => dist(c, o.c) < r + o.r + p.folga)) continue;
+      const r = p.min_radius + rnd() * (p.max_radius - p.min_radius);
+      if (dist(c, start) < r + p.rho_0 / 2 + p.clearance) continue;
+      if (dist(c, goal) < r + p.rho_0 / 2 + p.clearance) continue;
+      if (obs.some((o) => dist(c, o.c) < r + o.r + p.clearance)) continue;
       obs.push({ c, r });
     }
     return obs;
   }
 
   // ---------------------------------------------------------------
-  // 4. Potential Fields:  q_{k+1} = q_k + passo * F_total(q_k)
-  //    F_att = -k_att (q - obj);  F_rep = k_rep (1/rho - 1/rho_0) / rho^2 * direção
+  // 4. Potential Fields:  q_{k+1} = q_k + step * F_total(q_k)
+  //    F_att = -k_att (q - goal);  F_rep = k_rep (1/rho - 1/rho_0) / rho^2 * direction
   // ---------------------------------------------------------------
-  function planejarPF(p, obs, ini, obj) {
-    let x = ini[0], y = ini[1];
+  function planPF(p, obs, start, goal) {
+    let x = start[0], y = start[1];
     const traj = [[x, y]];
     let ok = false;
     for (let i = 0; i < p.max_iter; i++) {
-      let fx = -p.k_att * (x - obj[0]), fy = -p.k_att * (y - obj[1]);
+      let fx = -p.k_att * (x - goal[0]), fy = -p.k_att * (y - goal[1]);
       for (const { c, r } of obs) {
         const dx = x - c[0], dy = y - c[1], d = Math.hypot(dx, dy);
         let rho = d - r;
         if (rho > p.rho_0 || d < 1e-9) continue;
         rho = Math.max(rho, 1e-3);
-        const mod = p.k_rep * (1 / rho - 1 / p.rho_0) / (rho * rho);
-        fx += mod * dx / d; fy += mod * dy / d;
+        const mag = p.k_rep * (1 / rho - 1 / p.rho_0) / (rho * rho);
+        fx += mag * dx / d; fy += mag * dy / d;
       }
-      x += p.passo * fx; y += p.passo * fy;
-      if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 1e3 || Math.abs(y) > 1e3) break;  // divergiu
+      x += p.step * fx; y += p.step * fy;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 1e3 || Math.abs(y) > 1e3) break;  // diverged
       traj.push([x, y]);
-      if (Math.hypot(x - obj[0], y - obj[1]) < p.tolerancia) { ok = true; break; }
+      if (Math.hypot(x - goal[0], y - goal[1]) < p.tolerance) { ok = true; break; }
     }
-    return { caminho: traj, ok };
+    return { path: traj, ok };
   }
 
   // ---------------------------------------------------------------
-  // 5. A* em grade 8-conectada (mesma lógica do astar.py)
+  // 5. A* on an 8-connected grid (same logic as astar.py)
   // ---------------------------------------------------------------
-  const METRICAS = {
-    euclidiana: (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]),
+  const METRICS = {
+    euclidean: (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]),
     manhattan: (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]),
     chebyshev: (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])),
   };
 
-  function criarGrade(p, obs) {
+  function createGrid(p, obs) {
     const n = Math.round(10 / p.res) + 1;
-    const bloq = new Uint8Array(n * n);                // índice = y * n + x
+    const blocked = new Uint8Array(n * n);             // index = y * n + x
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
       const q = [x * p.res, y * p.res];
-      if (obs.some((o) => dist(q, o.c) <= o.r + p.margem)) bloq[y * n + x] = 1;
+      if (obs.some((o) => dist(q, o.c) <= o.r + p.margin)) blocked[y * n + x] = 1;
     }
-    return { n, bloq };
+    return { n, blocked };
   }
 
-  class Heap {                                         // fila de prioridade mínima por f
+  class Heap {                                         // min-priority queue by f
     constructor() { this.a = []; }
     get size() { return this.a.length; }
     push(item) {
       const a = this.a; a.push(item);
       let i = a.length - 1;
-      while (i > 0) { const pai = (i - 1) >> 1; if (a[pai][0] <= a[i][0]) break; [a[pai], a[i]] = [a[i], a[pai]]; i = pai; }
+      while (i > 0) { const parent = (i - 1) >> 1; if (a[parent][0] <= a[i][0]) break; [a[parent], a[i]] = [a[i], a[parent]]; i = parent; }
     }
     pop() {
-      const a = this.a, topo = a[0], fim = a.pop();
+      const a = this.a, top = a[0], last = a.pop();
       if (a.length) {
-        a[0] = fim;
+        a[0] = last;
         let i = 0;
         for (;;) {
           let m = i; const l = 2 * i + 1, r = l + 1;
@@ -211,33 +211,33 @@ const Engine = (() => {
           [a[m], a[i]] = [a[i], a[m]]; i = m;
         }
       }
-      return topo;
+      return top;
     }
   }
 
-  function planejarAStar(p, grade, ini, obj) {
-    const { n } = grade, bloq = grade.bloq.slice(), res = p.res;
-    const d = METRICAS[p.distancia];
-    const s = [Math.round(ini[0] / res), Math.round(ini[1] / res)];
-    const g = [Math.round(obj[0] / res), Math.round(obj[1] / res)];
-    bloq[s[1] * n + s[0]] = 0; bloq[g[1] * n + g[0]] = 0;   // início e objetivo nunca são bloqueados
+  function planAStar(p, grid, start, goal) {
+    const { n } = grid, blocked = grid.blocked.slice(), res = p.res;
+    const d = METRICS[p.distance];
+    const s = [Math.round(start[0] / res), Math.round(start[1] / res)];
+    const g = [Math.round(goal[0] / res), Math.round(goal[1] / res)];
+    blocked[s[1] * n + s[0]] = 0; blocked[g[1] * n + g[0]] = 0;   // start and goal are never blocked
     const gi = g[1] * n + g[0];
-    const custo = new Float64Array(n * n).fill(Infinity);
-    const pai = new Int32Array(n * n).fill(-1);
-    const fechado = new Uint8Array(n * n);
-    const aberta = new Heap();
-    custo[s[1] * n + s[0]] = 0;
-    aberta.push([d(s, g), s[1] * n + s[0]]);
-    while (aberta.size) {
-      const [, idx] = aberta.pop();
-      if (fechado[idx]) continue;
-      fechado[idx] = 1;
+    const cost = new Float64Array(n * n).fill(Infinity);
+    const parent = new Int32Array(n * n).fill(-1);
+    const closed = new Uint8Array(n * n);
+    const open = new Heap();
+    cost[s[1] * n + s[0]] = 0;
+    open.push([d(s, g), s[1] * n + s[0]]);
+    while (open.size) {
+      const [, idx] = open.pop();
+      if (closed[idx]) continue;
+      closed[idx] = 1;
       if (idx === gi) {
-        const cam = [];
-        for (let k = idx; k !== -1; k = pai[k]) cam.push([(k % n) * res, Math.floor(k / n) * res]);
-        cam.reverse();
-        cam[0] = [ini[0], ini[1]]; cam[cam.length - 1] = [obj[0], obj[1]];   // extremos exatos
-        return { caminho: cam, ok: true };
+        const path = [];
+        for (let k = idx; k !== -1; k = parent[k]) path.push([(k % n) * res, Math.floor(k / n) * res]);
+        path.reverse();
+        path[0] = [start[0], start[1]]; path[path.length - 1] = [goal[0], goal[1]];   // exact endpoints
+        return { path, ok: true };
       }
       const x = idx % n, y = Math.floor(idx / n);
       for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
@@ -245,84 +245,84 @@ const Engine = (() => {
         const nx = x + dx, ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
         const ni = ny * n + nx;
-        if (bloq[ni] || fechado[ni]) continue;
-        const gn = custo[idx] + d([x, y], [nx, ny]);
-        if (gn < custo[ni]) { custo[ni] = gn; pai[ni] = idx; aberta.push([gn + d([nx, ny], g), ni]); }
+        if (blocked[ni] || closed[ni]) continue;
+        const gn = cost[idx] + d([x, y], [nx, ny]);
+        if (gn < cost[ni]) { cost[ni] = gn; parent[ni] = idx; open.push([gn + d([nx, ny], g), ni]); }
       }
     }
-    return { caminho: [[ini[0], ini[1]]], ok: false };
+    return { path: [[start[0], start[1]]], ok: false };
   }
 
   // ---------------------------------------------------------------
-  // 6. PID e robô com inércia
-  //    m dv/dt = F - atrito v ;  J dw/dt = tau - atrito w
+  // 6. PID and robot with inertia
+  //    m dv/dt = F - friction v ;  J dw/dt = tau - friction w
   // ---------------------------------------------------------------
   class PID {
-    constructor(kp, ki, kd) { this.kp = kp; this.ki = ki; this.kd = kd; this.integral = 0; this.anterior = null; }
-    calcular(alvo, medida, dt) {
-      const erro = alvo - medida;
-      this.integral += erro * dt;
-      const d = this.anterior === null ? 0 : this.kd * (erro - this.anterior) / dt;
-      this.anterior = erro;
-      return this.kp * erro + this.ki * this.integral + d;
+    constructor(kp, ki, kd) { this.kp = kp; this.ki = ki; this.kd = kd; this.integral = 0; this.prev = null; }
+    compute(target, measurement, dt) {
+      const error = target - measurement;
+      this.integral += error * dt;
+      const d = this.prev === null ? 0 : this.kd * (error - this.prev) / dt;
+      this.prev = error;
+      return this.kp * error + this.ki * this.integral + d;
     }
   }
 
-  function seguir(caminho, p) {
-    if (caminho.length < 2) return { traj: caminho.map((q) => [...q]), chegou: false, pontos: caminho };
-    const pontos = reamostrar(caminho, p.espaco_pontos);
+  function follow(path, p) {
+    if (path.length < 2) return { traj: path.map((q) => [...q]), reached: false, points: path };
+    const points = resample(path, p.waypoint_spacing);
     const pidV = new PID(p.kp_v, p.ki_v, p.kd_v), pidT = new PID(p.kp_th, p.ki_th, p.kd_th);
-    let [x, y] = caminho[0];
-    let th = Math.atan2(pontos[0][1] - y, pontos[0][0] - x), v = 0, w = 0, k = 0, chegou = false;
+    let [x, y] = path[0];
+    let th = Math.atan2(points[0][1] - y, points[0][0] - x), v = 0, w = 0, k = 0, reached = false;
     const traj = [[x, y]];
     for (let i = 0; i < Math.floor(T_MAX / DT); i++) {
-      let alvo = pontos[k], d = Math.hypot(alvo[0] - x, alvo[1] - y);
-      const ultimo = k === pontos.length - 1;
-      if (d < (ultimo ? TOL_OBJETIVO : p.raio_aceite)) {
-        if (ultimo) { chegou = true; break; }
-        k++; alvo = pontos[k]; d = Math.hypot(alvo[0] - x, alvo[1] - y);
+      let target = points[k], d = Math.hypot(target[0] - x, target[1] - y);
+      const last = k === points.length - 1;
+      if (d < (last ? GOAL_TOL : p.accept_radius)) {
+        if (last) { reached = true; break; }
+        k++; target = points[k]; d = Math.hypot(target[0] - x, target[1] - y);
       }
-      const erroT = angulo(Math.atan2(alvo[1] - y, alvo[0] - x) - th);
-      let tau = pidT.calcular(erroT, 0, DT);
-      let vDes = p.v_max * Math.max(0, Math.cos(erroT)) ** 3;
-      if (k === pontos.length - 1) vDes = Math.min(vDes, 1.5 * d);
-      let F = pidV.calcular(vDes, v, DT);
-      F = Math.max(-FORCA_MAX, Math.min(FORCA_MAX, F));
-      tau = Math.max(-TORQUE_MAX, Math.min(TORQUE_MAX, tau));
-      v += (F - ATRITO_LIN * v) / p.massa * DT;
-      w += (tau - ATRITO_ANG * w) / p.inercia * DT;
+      const errT = wrapAngle(Math.atan2(target[1] - y, target[0] - x) - th);
+      let tau = pidT.compute(errT, 0, DT);
+      let vDes = p.v_max * Math.max(0, Math.cos(errT)) ** 3;
+      if (k === points.length - 1) vDes = Math.min(vDes, 1.5 * d);
+      let F = pidV.compute(vDes, v, DT);
+      F = Math.max(-MAX_FORCE, Math.min(MAX_FORCE, F));
+      tau = Math.max(-MAX_TORQUE, Math.min(MAX_TORQUE, tau));
+      v += (F - LIN_FRICTION * v) / p.mass * DT;
+      w += (tau - ANG_FRICTION * w) / p.inertia * DT;
       th += w * DT;
       x += v * Math.cos(th) * DT; y += v * Math.sin(th) * DT;
       traj.push([x, y]);
     }
-    return { traj, chegou, pontos };
+    return { traj, reached, points };
   }
 
   // ---------------------------------------------------------------
-  // 7. Execução completa
+  // 7. Full run
   // ---------------------------------------------------------------
-  function calcular(p) {
-    const ini = [p.inicio_x, p.inicio_y], obj = [p.objetivo_x, p.objetivo_y];
-    const obstaculos = gerarObstaculos(p, criarRng(p.semente), ini, obj);
-    const grade = criarGrade(p, obstaculos);
-    const planos = {};
-    for (const chave of ["pf", "astar"]) {
+  function compute(p) {
+    const start = [p.start_x, p.start_y], goal = [p.goal_x, p.goal_y];
+    const obstacles = generateObstacles(p, createRng(p.seed), start, goal);
+    const grid = createGrid(p, obstacles);
+    const plans = {};
+    for (const key of ["pf", "astar"]) {
       const t0 = performance.now();
-      const { caminho, ok } = chave === "pf" ? planejarPF(p, obstaculos, ini, obj) : planejarAStar(p, grade, ini, obj);
-      const tPlano = performance.now() - t0;
-      const { traj, chegou, pontos } = seguir(caminho, p);
-      const erro = erroRastreamento(traj, caminho);
-      planos[chave] = {
-        caminho, ok, tPlano, lPlano: comprimento(caminho),
-        traj, chegou, pontos, lReal: comprimento(traj),
-        erroMax: erro.reduce((m, e) => Math.max(m, e), 0),
-        bateu: colidiu(traj, obstaculos), tSim: (traj.length - 1) * DT,
+      const { path, ok } = key === "pf" ? planPF(p, obstacles, start, goal) : planAStar(p, grid, start, goal);
+      const tPlan = performance.now() - t0;
+      const { traj, reached, points } = follow(path, p);
+      const error = trackingError(traj, path);
+      plans[key] = {
+        path, ok, tPlan, lPlan: pathLength(path),
+        traj, reached, points, lReal: pathLength(traj),
+        maxError: error.reduce((m, e) => Math.max(m, e), 0),
+        hit: collided(traj, obstacles), tSim: (traj.length - 1) * DT,
       };
     }
-    return { params: p, ini, obj, obstaculos, grade, planos };
+    return { params: p, start, goal, obstacles, grid, plans };
   }
 
-  return { SECOES, PARAMETROS, sortear, validar, calcular, comprimento };
+  return { SECTIONS, PARAMETERS, draw, validate, compute, pathLength };
 })();
 
 if (typeof module !== "undefined") module.exports = Engine;

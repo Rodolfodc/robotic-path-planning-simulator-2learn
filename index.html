@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Compara A* e campos potenciais no mesmo cenário aleatório, com um robô guiado por PID seguindo cada caminho.">
-<title>Planejadores de Caminho</title>
+<meta name="description" content="Compares A* and potential fields on the same random scenario, with a PID-driven robot following each path.">
+<title>Path Planners</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
 <style>
-/* Layout: painel de controles à esquerda (abas + parâmetros), palco à direita (gráfico + métricas).
-   No celular o palco vem primeiro e os controles ficam logo abaixo. */
+/* Layout: control panel on the left (tabs + parameters), stage on the right (plot + metrics).
+   On mobile the stage comes first and the controls sit right below it. */
 :root{
   --bg:#faf9f5; --surface:#ffffff; --surface-2:#f3f1ea; --fg:#141413; --muted:#6b6a64; --line:#e6e3d8;
   --accent:#c6613f; --accent-fg:#ffffff; --accent-soft:#f6e3da;
@@ -39,7 +39,7 @@ h1{font:600 clamp(1.7rem,4vw,2.3rem)/1.15 var(--display);margin:0 0 6px;text-wra
 .panel{order:1;min-width:0;display:flex;flex-direction:column}
 @media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}.stage{order:1}.panel{order:2}}
 
-/* abas */
+/* tabs */
 .tabs{display:flex;flex-wrap:wrap;gap:4px;padding:10px 10px 0}
 .tab{font:inherit;font-size:.86rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:8px;padding:6px 10px;cursor:pointer}
 .tab:hover{background:var(--surface-2);color:var(--fg)}
@@ -63,7 +63,7 @@ input:disabled,select:disabled{opacity:.7;background:var(--surface-2);border-sty
 .chip.pid{background:var(--accent-soft);border-color:var(--accent)}
 .tab .tdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--obs-line)}
 .tdot.pf{background:var(--pf)}.tdot.astar{background:var(--as)}.tdot.pid{background:var(--accent)}
-.nota{margin:0 0 6px;font-size:.84rem;color:var(--muted)}
+.note{margin:0 0 6px;font-size:.84rem;color:var(--muted)}
 .row,.check{border-radius:8px}
 .row:hover,.check:hover,.row:focus-within{background:var(--surface-2)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -79,16 +79,16 @@ input:disabled,select:disabled{opacity:.7;background:var(--surface-2);border-sty
 .btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 .btn.primary:hover{filter:brightness(1.07)}
 
-/* palco */
+/* stage */
 .canvas-box{width:100%;max-width:760px;margin:0 auto;aspect-ratio:1;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
 canvas{display:block;width:100%;height:100%}
 .status{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;font-size:.84rem;color:var(--muted)}
-.status.erro{color:var(--bad)}
-.legenda{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.82rem;color:var(--muted)}
-.legenda span{display:inline-flex;align-items:center;gap:7px}
+.status.error{color:var(--bad)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.82rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
 .sw{width:26px;height:0;border-top:3px solid currentColor}
 .sw.tr{border-top-style:dashed;border-top-width:2px}
-.tabela{overflow-x:auto}
+.table-wrap{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:.84rem;font-variant-numeric:tabular-nums;min-width:640px}
 th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
 th{font-weight:500;color:var(--muted);font-size:.76rem}
@@ -104,24 +104,24 @@ tbody tr:last-child td{border-bottom:0}
 
 <div class="wrap">
   <header>
-    <h1>Planejadores de caminho</h1>
-    <p class="lead">Compare o A* e os campos potenciais no mesmo cenário aleatório e veja como um robô com inércia, guiado por PID, segue cada caminho. Mude um parâmetro e o resultado é recalculado na hora.</p>
+    <h1>Path planners</h1>
+    <p class="lead">Compare A* and potential fields on the same random scenario and see how a robot with inertia, driven by PID, follows each path. Change a parameter and the result is recomputed instantly.</p>
   </header>
   <div class="layout">
-    <section class="card stage" aria-label="Resultado">
-      <div class="canvas-box"><canvas id="cv" role="img" aria-label="Caminhos planejados e percorridos"></canvas></div>
-      <div class="legenda" id="legenda"></div>
+    <section class="card stage" aria-label="Result">
+      <div class="canvas-box"><canvas id="cv" role="img" aria-label="Planned and driven paths"></canvas></div>
+      <div class="legend" id="legend"></div>
       <div class="status" id="status" role="status"></div>
-      <div class="tabela"><table id="tabela"></table></div>
+      <div class="table-wrap"><table id="table"></table></div>
     </section>
-    <section class="card panel" aria-label="Parâmetros">
+    <section class="card panel" aria-label="Parameters">
       <div class="tabs" id="tabs" role="tablist"></div>
       <div id="panes"></div>
       <div class="actions">
-        <button class="btn primary" id="b-exec" type="button">Executar</button>
-        <button class="btn" id="b-sort" type="button">Sortear tudo</button>
-        <button class="btn" id="b-fix" type="button">Fixar valores</button>
-        <button class="btn" id="b-pad" type="button">Padrões</button>
+        <button class="btn primary" id="b-run" type="button">Run</button>
+        <button class="btn" id="b-rand" type="button">Randomize all</button>
+        <button class="btn" id="b-lock" type="button">Lock values</button>
+        <button class="btn" id="b-def" type="button">Defaults</button>
       </div>
     </section>
   </div>
@@ -129,67 +129,67 @@ tbody tr:last-child td{border-bottom:0}
 
 <div id="tip" role="tooltip"></div>
 <script>
-/* Motor dos planejadores: Potential Fields, A* e seguidor com PID.
-   Porta em JavaScript de potential_fields.py, astar.py, pid.py e follow_path.py.
-   Não depende do navegador: roda também no Node (veja o fim do arquivo). */
+/* Planner engine: Potential Fields, A* and PID follower.
+   JavaScript port of potential_fields.py, astar.py, pid.py and follow_path.py.
+   Does not depend on the browser: also runs in Node (see the end of the file). */
 const Engine = (() => {
   // ---------------------------------------------------------------
-  // 1. Parâmetros: [chave, rótulo, padrão, tipo, faixa do sorteio, dica]
-  //    faixa = [mín, máx] para números, ou lista de opções para escolhas.
+  // 1. Parameters: [key, label, default, type, random range, hint]
+  //    range = [min, max] for numbers, or a list of options for choices.
   // ---------------------------------------------------------------
-  const SECOES = [
-    ["Cenário", [
-      ["semente",      "Semente",                2,     "int",   [0, 99999], "Número que define o sorteio dos obstáculos. A mesma semente gera sempre o mesmo cenário."],
-      ["n_obstaculos", "Nº de obstáculos",       4,     "int",   [2, 8],     "Quantos obstáculos circulares tentar colocar. Se não couberem com a folga pedida, aparecem menos."],
-      ["raio_min",     "Raio mínimo",            0.5,   "float", [0.3, 0.8], "Menor raio que um obstáculo pode ter (o mapa vai de 0 a 10)."],
-      ["raio_max",     "Raio máximo",            1.2,   "float", [0.9, 1.5], "Maior raio que um obstáculo pode ter. Se ficar menor que o mínimo, os dois são trocados."],
-      ["folga",        "Folga entre obstáculos", 0.5,   "float", [0.2, 1.0], "Distância mínima entre obstáculos, e deles até o início e o objetivo. Evita cenários sem passagem."],
-      ["inicio_x",     "Início x",               0,     "float", [0, 2],     "Posição horizontal de onde o robô parte (0 a 10)."],
-      ["inicio_y",     "Início y",               0,     "float", [0, 2],     "Posição vertical de onde o robô parte (0 a 10)."],
-      ["objetivo_x",   "Objetivo x",             10,    "float", [8, 10],    "Posição horizontal do destino (0 a 10)."],
-      ["objetivo_y",   "Objetivo y",             10,    "float", [8, 10],    "Posição vertical do destino (0 a 10)."],
-    ], { id: "cenario", chip: "Cenário", nota: "Vale para os dois algoritmos: os dois enfrentam os mesmos obstáculos." }],
+  const SECTIONS = [
+    ["Scenario", [
+      ["seed",        "Seed",                        2,     "int",   [0, 99999], "Number that drives the obstacle draw. The same seed always generates the same scenario."],
+      ["n_obstacles", "No. of obstacles",            4,     "int",   [2, 8],     "How many circular obstacles to try to place. If they do not fit with the requested clearance, fewer appear."],
+      ["min_radius",  "Minimum radius",              0.5,   "float", [0.3, 0.8], "Smallest radius an obstacle can have (the map goes from 0 to 10)."],
+      ["max_radius",  "Maximum radius",              1.2,   "float", [0.9, 1.5], "Largest radius an obstacle can have. If it ends up smaller than the minimum, the two are swapped."],
+      ["clearance",   "Clearance between obstacles", 0.5,   "float", [0.2, 1.0], "Minimum distance between obstacles, and from them to the start and the goal. Avoids scenarios with no way through."],
+      ["start_x",     "Start x",                     0,     "float", [0, 2],     "Horizontal position the robot departs from (0 to 10)."],
+      ["start_y",     "Start y",                     0,     "float", [0, 2],     "Vertical position the robot departs from (0 to 10)."],
+      ["goal_x",      "Goal x",                      10,    "float", [8, 10],    "Horizontal position of the destination (0 to 10)."],
+      ["goal_y",      "Goal y",                      10,    "float", [8, 10],    "Vertical position of the destination (0 to 10)."],
+    ], { id: "scenario", chip: "Scenario", note: "Applies to both algorithms: both face the same obstacles." }],
     ["Potential Fields", [
-      ["k_att",      "Ganho atrativo (k_att)",     1.0,  "float", [0.5, 3],    "Força com que o objetivo puxa o robô. Maior: vai mais direto ao destino, mas passa mais perto dos obstáculos."],
-      ["k_rep",      "Ganho repulsivo (k_rep)",    5.0,  "float", [1, 15],     "Força com que os obstáculos empurram o robô. Maior: mantém mais distância, mas pode travar em passagens estreitas."],
-      ["rho_0",      "Zona de influência (rho_0)", 2.0,  "float", [1, 3],      "Distância da borda do obstáculo até onde ele deixa de repelir. Fora dessa zona a força é zero. Também afasta os obstáculos do início e do objetivo ao sortear o cenário."],
-      ["passo",      "Passo",                      0.05, "float", [0.02, 0.1], "Tamanho de cada passo da descida de gradiente. Pequeno: suave e lento. Grande: rápido, mas pode oscilar ou divergir."],
-      ["tolerancia", "Tolerância ao objetivo",     0.1,  "float", [0.05, 0.2], "A que distância do objetivo o planejador considera que chegou."],
-      ["max_iter",   "Máx. de iterações",          2000, "int",   [500, 4000], "Limite de passos. Se acabar antes de chegar, o planejador falha (provável mínimo local)."],
-    ], { id: "pf", chip: "PF", nota: "Só afeta o Potential Fields. O A* ignora estes parâmetros." }],
+      ["k_att",     "Attractive gain (k_att)",   1.0,  "float", [0.5, 3],    "How strongly the goal pulls the robot. Higher: heads more directly to the destination, but passes closer to the obstacles."],
+      ["k_rep",     "Repulsive gain (k_rep)",    5.0,  "float", [1, 15],     "How strongly the obstacles push the robot. Higher: keeps more distance, but can get stuck in narrow passages."],
+      ["rho_0",     "Influence zone (rho_0)",    2.0,  "float", [1, 3],      "Distance from the obstacle's edge beyond which it stops repelling. Outside this zone the force is zero. It also keeps obstacles away from the start and the goal when drawing the scenario."],
+      ["step",      "Step",                      0.05, "float", [0.02, 0.1], "Size of each gradient descent step. Small: smooth and slow. Large: fast, but can oscillate or diverge."],
+      ["tolerance", "Goal tolerance",            0.1,  "float", [0.05, 0.2], "How close to the goal the planner considers it has arrived."],
+      ["max_iter",  "Max. iterations",           2000, "int",   [500, 4000], "Step limit. If it runs out before arriving, the planner fails (likely a local minimum)."],
+    ], { id: "pf", chip: "PF", note: "Only affects Potential Fields. A* ignores these parameters." }],
     ["A*", [
-      ["res",       "Tamanho da célula",    0.2,         "float", [0.1, 0.2, 0.25, 0.5], "Lado de cada célula da grade. Menor: caminho mais preciso, mas mais células para buscar."],
-      ["margem",    "Margem de segurança",  0.1,         "float", [0, 0.3],              "Folga extra ao redor dos obstáculos ao marcar células como bloqueadas. Maior: caminho mais afastado."],
-      ["distancia", "Métrica de distância", "euclidiana", "str",  ["euclidiana", "manhattan", "chebyshev"], "Como medir o custo de um passo e a distância até o objetivo. Euclidiana: em linha reta. Manhattan: soma dos eixos (diagonal custa 2). Chebyshev: o maior eixo (diagonal custa 1)."],
-    ], { id: "astar", chip: "A*", nota: "Só afeta o A*. O Potential Fields ignora estes parâmetros." }],
-    ["Robô e PID", [
-      ["v_max",         "Velocidade máxima",        1.5, "float", [0.5, 2.5],  "Velocidade de cruzeiro que o PID de velocidade tenta atingir em linha reta. Muito alta, o robô passa dos pontos e corta curvas."],
-      ["espaco_pontos", "Espaço entre pontos-alvo", 0.5, "float", [0.25, 1],   "O caminho planejado é dividido em pontos com esta distância entre si, e o robô vai de um a outro."],
-      ["raio_aceite",   "Raio de aceitação",        0.3, "float", [0.15, 0.5], "A que distância de um ponto-alvo o robô o considera alcançado e passa ao próximo. Maior: corta mais as curvas."],
-      ["massa",         "Massa",                    1.0, "float", [0.5, 2],    "Massa do robô. Maior: mais inércia, acelera e freia mais devagar."],
-      ["inercia",       "Inércia de giro",          0.5, "float", [0.2, 1],    "Resistência a girar. Maior: o robô demora mais para virar e para parar de virar."],
-      ["kp_v",          "Velocidade: Kp",           3.0, "float", [1, 6],      "Proporcional da velocidade: reage ao erro de agora entre a velocidade desejada e a real."],
-      ["ki_v",          "Velocidade: Ki",           0.5, "float", [0, 1],      "Integral da velocidade: acumula o erro ao longo do tempo e elimina a diferença que sobra."],
-      ["kd_v",          "Velocidade: Kd",           0.0, "float", [0, 0.3],    "Derivativo da velocidade: amortece variações rápidas. Valores altos deixam a simulação instável."],
-      ["kp_th",         "Direção: Kp",              4.0, "float", [1, 8],      "Proporcional da direção: quanto o robô gira para cada radiano de erro entre sua direção e a do próximo ponto."],
-      ["ki_th",         "Direção: Ki",              0.0, "float", [0, 0.3],    "Integral da direção: corrige um erro de ângulo que persiste. Normalmente fica em 0."],
-      ["kd_th",         "Direção: Kd",              1.0, "float", [0, 2],      "Derivativo da direção: amortece o giro e evita oscilar em torno da direção certa."],
-    ], { id: "pid", chip: "PID", nota: "Controla o robô que segue o caminho, tanto o do A* quanto o do Potential Fields. Não muda o caminho planejado, só o percorrido." }],
+      ["res",      "Cell size",       0.2,         "float", [0.1, 0.2, 0.25, 0.5], "Side of each grid cell. Smaller: more precise path, but more cells to search."],
+      ["margin",   "Safety margin",   0.1,         "float", [0, 0.3],              "Extra clearance around obstacles when marking cells as blocked. Larger: path stays farther away."],
+      ["distance", "Distance metric", "euclidean", "str",   ["euclidean", "manhattan", "chebyshev"], "How to measure the cost of a step and the distance to the goal. Euclidean: straight line. Manhattan: sum of the axes (a diagonal costs 2). Chebyshev: the largest axis (a diagonal costs 1)."],
+    ], { id: "astar", chip: "A*", note: "Only affects A*. Potential Fields ignores these parameters." }],
+    ["Robot and PID", [
+      ["v_max",            "Maximum speed",            1.5, "float", [0.5, 2.5],  "Cruise speed the speed PID tries to reach on a straight line. Too high and the robot overshoots the points and cuts corners."],
+      ["waypoint_spacing", "Spacing between targets",  0.5, "float", [0.25, 1],   "The planned path is split into points this far apart, and the robot goes from one to the next."],
+      ["accept_radius",    "Acceptance radius",        0.3, "float", [0.15, 0.5], "How close to a target point the robot considers it reached and moves on to the next. Larger: cuts corners more."],
+      ["mass",             "Mass",                     1.0, "float", [0.5, 2],    "Robot mass. Higher: more inertia, accelerates and brakes more slowly."],
+      ["inertia",          "Rotational inertia",       0.5, "float", [0.2, 1],    "Resistance to turning. Higher: the robot takes longer to turn and to stop turning."],
+      ["kp_v",             "Speed: Kp",                3.0, "float", [1, 6],      "Speed proportional term: reacts to the current error between the desired and actual speed."],
+      ["ki_v",             "Speed: Ki",                0.5, "float", [0, 1],      "Speed integral term: accumulates the error over time and removes the remaining offset."],
+      ["kd_v",             "Speed: Kd",                0.0, "float", [0, 0.3],    "Speed derivative term: damps fast changes. High values make the simulation unstable."],
+      ["kp_th",            "Heading: Kp",              4.0, "float", [1, 8],      "Heading proportional term: how much the robot turns for each radian of error between its heading and the direction of the next point."],
+      ["ki_th",            "Heading: Ki",              0.0, "float", [0, 0.3],    "Heading integral term: corrects a persistent angle error. Usually left at 0."],
+      ["kd_th",            "Heading: Kd",              1.0, "float", [0, 2],      "Heading derivative term: damps the turning and avoids oscillating around the right heading."],
+    ], { id: "pid", chip: "PID", note: "Controls the robot that follows the path, both A*'s and Potential Fields'. It does not change the planned path, only the driven one." }],
   ];
 
-  const PARAMETROS = {};
-  for (const [, ps, meta] of SECOES)
-    for (const [c, r, d, t, f, dica] of ps) PARAMETROS[c] = { rotulo: r, padrao: d, tipo: t, faixa: f, dica, secao: meta.id };
+  const PARAMETERS = {};
+  for (const [, ps, meta] of SECTIONS)
+    for (const [k, l, d, t, r, hint] of ps) PARAMETERS[k] = { label: l, defaultValue: d, type: t, range: r, hint, section: meta.id };
 
-  // Constantes da física do robô (não expostas)
-  const DT = 0.05, T_MAX = 80, ATRITO_LIN = 0.5, ATRITO_ANG = 0.5;
-  const FORCA_MAX = 3, TORQUE_MAX = 3, TOL_OBJETIVO = 0.2;
+  // Robot physics constants (not exposed)
+  const DT = 0.05, T_MAX = 80, LIN_FRICTION = 0.5, ANG_FRICTION = 0.5;
+  const MAX_FORCE = 3, MAX_TORQUE = 3, GOAL_TOL = 0.2;
 
   // ---------------------------------------------------------------
-  // 2. Utilidades
+  // 2. Utilities
   // ---------------------------------------------------------------
-  function criarRng(semente) {                       // mulberry32: rápido e reprodutível
-    let a = (semente >>> 0) + 0x6D2B79F5;
+  function createRng(seed) {                         // mulberry32: fast and reproducible
+    let a = (seed >>> 0) + 0x6D2B79F5;
     return () => {
       a = (a + 0x6D2B79F5) >>> 0;
       let t = a;
@@ -199,38 +199,38 @@ const Engine = (() => {
     };
   }
 
-  function sortear(chave, rnd = Math.random) {
-    const { tipo, faixa } = PARAMETROS[chave];
-    if (faixa.length > 2 || tipo === "str") return faixa[Math.floor(rnd() * faixa.length)];
-    const [lo, hi] = faixa;
-    if (tipo === "int") return lo + Math.floor(rnd() * (hi - lo + 1));
+  function draw(key, rnd = Math.random) {
+    const { type, range } = PARAMETERS[key];
+    if (range.length > 2 || type === "str") return range[Math.floor(rnd() * range.length)];
+    const [lo, hi] = range;
+    if (type === "int") return lo + Math.floor(rnd() * (hi - lo + 1));
     return Math.round((lo + rnd() * (hi - lo)) * 100) / 100;
   }
 
-  function validar(p) {
-    for (const c of ["passo", "res", "max_iter", "v_max", "massa", "inercia", "espaco_pontos", "raio_aceite"])
-      if (!(p[c] > 0)) return `"${PARAMETROS[c].rotulo}" precisa ser maior que zero.`;
-    for (const c of ["inicio_x", "inicio_y", "objetivo_x", "objetivo_y"])
-      if (!(p[c] >= 0 && p[c] <= 10)) return `"${PARAMETROS[c].rotulo}" precisa estar entre 0 e 10.`;
-    for (const [c, { tipo }] of Object.entries(PARAMETROS))
-      if (tipo !== "str" && !Number.isFinite(p[c])) return `Valor inválido em "${PARAMETROS[c].rotulo}".`;
+  function validate(p) {
+    for (const k of ["step", "res", "max_iter", "v_max", "mass", "inertia", "waypoint_spacing", "accept_radius"])
+      if (!(p[k] > 0)) return `"${PARAMETERS[k].label}" must be greater than zero.`;
+    for (const k of ["start_x", "start_y", "goal_x", "goal_y"])
+      if (!(p[k] >= 0 && p[k] <= 10)) return `"${PARAMETERS[k].label}" must be between 0 and 10.`;
+    for (const [k, { type }] of Object.entries(PARAMETERS))
+      if (type !== "str" && !Number.isFinite(p[k])) return `Invalid value in "${PARAMETERS[k].label}".`;
     return null;
   }
 
   const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-  function comprimento(c) { let s = 0; for (let i = 1; i < c.length; i++) s += dist(c[i - 1], c[i]); return s; }
-  const angulo = (a) => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+  function pathLength(c) { let s = 0; for (let i = 1; i < c.length; i++) s += dist(c[i - 1], c[i]); return s; }
+  const wrapAngle = (a) => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
 
-  function reamostrar(c, espaco) {                   // pontos igualmente espaçados
+  function resample(c, spacing) {                    // evenly spaced points
     const s = [0];
     for (let i = 1; i < c.length; i++) s.push(s[i - 1] + dist(c[i - 1], c[i]));
     const total = s[s.length - 1];
-    const alvos = [];
-    for (let a = espaco; a < total; a += espaco) alvos.push(a);
-    alvos.push(total);
+    const targets = [];
+    for (let a = spacing; a < total; a += spacing) targets.push(a);
+    targets.push(total);
     const out = [];
     let j = 0;
-    for (const a of alvos) {
+    for (const a of targets) {
       while (j < s.length - 2 && s[j + 1] < a) j++;
       const seg = s[j + 1] - s[j];
       const f = seg > 0 ? (a - s[j]) / seg : 0;
@@ -239,100 +239,100 @@ const Engine = (() => {
     return out;
   }
 
-  function distAteSegmento(p, a, b) {
+  function distToSegment(p, a, b) {
     const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
     let t = l2 > 0 ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2 : 0;
     t = Math.max(0, Math.min(1, t));
     return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
   }
 
-  function erroRastreamento(traj, caminho) {         // distância de cada ponto ao caminho planejado
-    const erros = new Float64Array(traj.length);
+  function trackingError(traj, path) {               // distance from each point to the planned path
+    const errors = new Float64Array(traj.length);
     for (let i = 0; i < traj.length; i++) {
       let m = Infinity;
-      for (let j = 1; j < caminho.length; j++) m = Math.min(m, distAteSegmento(traj[i], caminho[j - 1], caminho[j]));
-      erros[i] = caminho.length > 1 ? m : dist(traj[i], caminho[0]);
+      for (let j = 1; j < path.length; j++) m = Math.min(m, distToSegment(traj[i], path[j - 1], path[j]));
+      errors[i] = path.length > 1 ? m : dist(traj[i], path[0]);
     }
-    return erros;
+    return errors;
   }
 
-  const colidiu = (traj, obs) => traj.some((q) => obs.some((o) => dist(q, o.c) < o.r));
+  const collided = (traj, obs) => traj.some((q) => obs.some((o) => dist(q, o.c) < o.r));
 
   // ---------------------------------------------------------------
-  // 3. Cenário
+  // 3. Scenario
   // ---------------------------------------------------------------
-  function gerarObstaculos(p, rnd, ini, obj) {
+  function generateObstacles(p, rnd, start, goal) {
     const obs = [];
-    let tentativas = 0;
-    while (obs.length < p.n_obstaculos && tentativas < 1000) {
-      tentativas++;
+    let attempts = 0;
+    while (obs.length < p.n_obstacles && attempts < 1000) {
+      attempts++;
       const c = [1 + rnd() * 8, 1 + rnd() * 8];
-      const r = p.raio_min + rnd() * (p.raio_max - p.raio_min);
-      if (dist(c, ini) < r + p.rho_0 / 2 + p.folga) continue;
-      if (dist(c, obj) < r + p.rho_0 / 2 + p.folga) continue;
-      if (obs.some((o) => dist(c, o.c) < r + o.r + p.folga)) continue;
+      const r = p.min_radius + rnd() * (p.max_radius - p.min_radius);
+      if (dist(c, start) < r + p.rho_0 / 2 + p.clearance) continue;
+      if (dist(c, goal) < r + p.rho_0 / 2 + p.clearance) continue;
+      if (obs.some((o) => dist(c, o.c) < r + o.r + p.clearance)) continue;
       obs.push({ c, r });
     }
     return obs;
   }
 
   // ---------------------------------------------------------------
-  // 4. Potential Fields:  q_{k+1} = q_k + passo * F_total(q_k)
-  //    F_att = -k_att (q - obj);  F_rep = k_rep (1/rho - 1/rho_0) / rho^2 * direção
+  // 4. Potential Fields:  q_{k+1} = q_k + step * F_total(q_k)
+  //    F_att = -k_att (q - goal);  F_rep = k_rep (1/rho - 1/rho_0) / rho^2 * direction
   // ---------------------------------------------------------------
-  function planejarPF(p, obs, ini, obj) {
-    let x = ini[0], y = ini[1];
+  function planPF(p, obs, start, goal) {
+    let x = start[0], y = start[1];
     const traj = [[x, y]];
     let ok = false;
     for (let i = 0; i < p.max_iter; i++) {
-      let fx = -p.k_att * (x - obj[0]), fy = -p.k_att * (y - obj[1]);
+      let fx = -p.k_att * (x - goal[0]), fy = -p.k_att * (y - goal[1]);
       for (const { c, r } of obs) {
         const dx = x - c[0], dy = y - c[1], d = Math.hypot(dx, dy);
         let rho = d - r;
         if (rho > p.rho_0 || d < 1e-9) continue;
         rho = Math.max(rho, 1e-3);
-        const mod = p.k_rep * (1 / rho - 1 / p.rho_0) / (rho * rho);
-        fx += mod * dx / d; fy += mod * dy / d;
+        const mag = p.k_rep * (1 / rho - 1 / p.rho_0) / (rho * rho);
+        fx += mag * dx / d; fy += mag * dy / d;
       }
-      x += p.passo * fx; y += p.passo * fy;
-      if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 1e3 || Math.abs(y) > 1e3) break;  // divergiu
+      x += p.step * fx; y += p.step * fy;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 1e3 || Math.abs(y) > 1e3) break;  // diverged
       traj.push([x, y]);
-      if (Math.hypot(x - obj[0], y - obj[1]) < p.tolerancia) { ok = true; break; }
+      if (Math.hypot(x - goal[0], y - goal[1]) < p.tolerance) { ok = true; break; }
     }
-    return { caminho: traj, ok };
+    return { path: traj, ok };
   }
 
   // ---------------------------------------------------------------
-  // 5. A* em grade 8-conectada (mesma lógica do astar.py)
+  // 5. A* on an 8-connected grid (same logic as astar.py)
   // ---------------------------------------------------------------
-  const METRICAS = {
-    euclidiana: (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]),
+  const METRICS = {
+    euclidean: (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]),
     manhattan: (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]),
     chebyshev: (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])),
   };
 
-  function criarGrade(p, obs) {
+  function createGrid(p, obs) {
     const n = Math.round(10 / p.res) + 1;
-    const bloq = new Uint8Array(n * n);                // índice = y * n + x
+    const blocked = new Uint8Array(n * n);             // index = y * n + x
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
       const q = [x * p.res, y * p.res];
-      if (obs.some((o) => dist(q, o.c) <= o.r + p.margem)) bloq[y * n + x] = 1;
+      if (obs.some((o) => dist(q, o.c) <= o.r + p.margin)) blocked[y * n + x] = 1;
     }
-    return { n, bloq };
+    return { n, blocked };
   }
 
-  class Heap {                                         // fila de prioridade mínima por f
+  class Heap {                                         // min-priority queue by f
     constructor() { this.a = []; }
     get size() { return this.a.length; }
     push(item) {
       const a = this.a; a.push(item);
       let i = a.length - 1;
-      while (i > 0) { const pai = (i - 1) >> 1; if (a[pai][0] <= a[i][0]) break; [a[pai], a[i]] = [a[i], a[pai]]; i = pai; }
+      while (i > 0) { const parent = (i - 1) >> 1; if (a[parent][0] <= a[i][0]) break; [a[parent], a[i]] = [a[i], a[parent]]; i = parent; }
     }
     pop() {
-      const a = this.a, topo = a[0], fim = a.pop();
+      const a = this.a, top = a[0], last = a.pop();
       if (a.length) {
-        a[0] = fim;
+        a[0] = last;
         let i = 0;
         for (;;) {
           let m = i; const l = 2 * i + 1, r = l + 1;
@@ -342,33 +342,33 @@ const Engine = (() => {
           [a[m], a[i]] = [a[i], a[m]]; i = m;
         }
       }
-      return topo;
+      return top;
     }
   }
 
-  function planejarAStar(p, grade, ini, obj) {
-    const { n } = grade, bloq = grade.bloq.slice(), res = p.res;
-    const d = METRICAS[p.distancia];
-    const s = [Math.round(ini[0] / res), Math.round(ini[1] / res)];
-    const g = [Math.round(obj[0] / res), Math.round(obj[1] / res)];
-    bloq[s[1] * n + s[0]] = 0; bloq[g[1] * n + g[0]] = 0;   // início e objetivo nunca são bloqueados
+  function planAStar(p, grid, start, goal) {
+    const { n } = grid, blocked = grid.blocked.slice(), res = p.res;
+    const d = METRICS[p.distance];
+    const s = [Math.round(start[0] / res), Math.round(start[1] / res)];
+    const g = [Math.round(goal[0] / res), Math.round(goal[1] / res)];
+    blocked[s[1] * n + s[0]] = 0; blocked[g[1] * n + g[0]] = 0;   // start and goal are never blocked
     const gi = g[1] * n + g[0];
-    const custo = new Float64Array(n * n).fill(Infinity);
-    const pai = new Int32Array(n * n).fill(-1);
-    const fechado = new Uint8Array(n * n);
-    const aberta = new Heap();
-    custo[s[1] * n + s[0]] = 0;
-    aberta.push([d(s, g), s[1] * n + s[0]]);
-    while (aberta.size) {
-      const [, idx] = aberta.pop();
-      if (fechado[idx]) continue;
-      fechado[idx] = 1;
+    const cost = new Float64Array(n * n).fill(Infinity);
+    const parent = new Int32Array(n * n).fill(-1);
+    const closed = new Uint8Array(n * n);
+    const open = new Heap();
+    cost[s[1] * n + s[0]] = 0;
+    open.push([d(s, g), s[1] * n + s[0]]);
+    while (open.size) {
+      const [, idx] = open.pop();
+      if (closed[idx]) continue;
+      closed[idx] = 1;
       if (idx === gi) {
-        const cam = [];
-        for (let k = idx; k !== -1; k = pai[k]) cam.push([(k % n) * res, Math.floor(k / n) * res]);
-        cam.reverse();
-        cam[0] = [ini[0], ini[1]]; cam[cam.length - 1] = [obj[0], obj[1]];   // extremos exatos
-        return { caminho: cam, ok: true };
+        const path = [];
+        for (let k = idx; k !== -1; k = parent[k]) path.push([(k % n) * res, Math.floor(k / n) * res]);
+        path.reverse();
+        path[0] = [start[0], start[1]]; path[path.length - 1] = [goal[0], goal[1]];   // exact endpoints
+        return { path, ok: true };
       }
       const x = idx % n, y = Math.floor(idx / n);
       for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
@@ -376,84 +376,84 @@ const Engine = (() => {
         const nx = x + dx, ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
         const ni = ny * n + nx;
-        if (bloq[ni] || fechado[ni]) continue;
-        const gn = custo[idx] + d([x, y], [nx, ny]);
-        if (gn < custo[ni]) { custo[ni] = gn; pai[ni] = idx; aberta.push([gn + d([nx, ny], g), ni]); }
+        if (blocked[ni] || closed[ni]) continue;
+        const gn = cost[idx] + d([x, y], [nx, ny]);
+        if (gn < cost[ni]) { cost[ni] = gn; parent[ni] = idx; open.push([gn + d([nx, ny], g), ni]); }
       }
     }
-    return { caminho: [[ini[0], ini[1]]], ok: false };
+    return { path: [[start[0], start[1]]], ok: false };
   }
 
   // ---------------------------------------------------------------
-  // 6. PID e robô com inércia
-  //    m dv/dt = F - atrito v ;  J dw/dt = tau - atrito w
+  // 6. PID and robot with inertia
+  //    m dv/dt = F - friction v ;  J dw/dt = tau - friction w
   // ---------------------------------------------------------------
   class PID {
-    constructor(kp, ki, kd) { this.kp = kp; this.ki = ki; this.kd = kd; this.integral = 0; this.anterior = null; }
-    calcular(alvo, medida, dt) {
-      const erro = alvo - medida;
-      this.integral += erro * dt;
-      const d = this.anterior === null ? 0 : this.kd * (erro - this.anterior) / dt;
-      this.anterior = erro;
-      return this.kp * erro + this.ki * this.integral + d;
+    constructor(kp, ki, kd) { this.kp = kp; this.ki = ki; this.kd = kd; this.integral = 0; this.prev = null; }
+    compute(target, measurement, dt) {
+      const error = target - measurement;
+      this.integral += error * dt;
+      const d = this.prev === null ? 0 : this.kd * (error - this.prev) / dt;
+      this.prev = error;
+      return this.kp * error + this.ki * this.integral + d;
     }
   }
 
-  function seguir(caminho, p) {
-    if (caminho.length < 2) return { traj: caminho.map((q) => [...q]), chegou: false, pontos: caminho };
-    const pontos = reamostrar(caminho, p.espaco_pontos);
+  function follow(path, p) {
+    if (path.length < 2) return { traj: path.map((q) => [...q]), reached: false, points: path };
+    const points = resample(path, p.waypoint_spacing);
     const pidV = new PID(p.kp_v, p.ki_v, p.kd_v), pidT = new PID(p.kp_th, p.ki_th, p.kd_th);
-    let [x, y] = caminho[0];
-    let th = Math.atan2(pontos[0][1] - y, pontos[0][0] - x), v = 0, w = 0, k = 0, chegou = false;
+    let [x, y] = path[0];
+    let th = Math.atan2(points[0][1] - y, points[0][0] - x), v = 0, w = 0, k = 0, reached = false;
     const traj = [[x, y]];
     for (let i = 0; i < Math.floor(T_MAX / DT); i++) {
-      let alvo = pontos[k], d = Math.hypot(alvo[0] - x, alvo[1] - y);
-      const ultimo = k === pontos.length - 1;
-      if (d < (ultimo ? TOL_OBJETIVO : p.raio_aceite)) {
-        if (ultimo) { chegou = true; break; }
-        k++; alvo = pontos[k]; d = Math.hypot(alvo[0] - x, alvo[1] - y);
+      let target = points[k], d = Math.hypot(target[0] - x, target[1] - y);
+      const last = k === points.length - 1;
+      if (d < (last ? GOAL_TOL : p.accept_radius)) {
+        if (last) { reached = true; break; }
+        k++; target = points[k]; d = Math.hypot(target[0] - x, target[1] - y);
       }
-      const erroT = angulo(Math.atan2(alvo[1] - y, alvo[0] - x) - th);
-      let tau = pidT.calcular(erroT, 0, DT);
-      let vDes = p.v_max * Math.max(0, Math.cos(erroT)) ** 3;
-      if (k === pontos.length - 1) vDes = Math.min(vDes, 1.5 * d);
-      let F = pidV.calcular(vDes, v, DT);
-      F = Math.max(-FORCA_MAX, Math.min(FORCA_MAX, F));
-      tau = Math.max(-TORQUE_MAX, Math.min(TORQUE_MAX, tau));
-      v += (F - ATRITO_LIN * v) / p.massa * DT;
-      w += (tau - ATRITO_ANG * w) / p.inercia * DT;
+      const errT = wrapAngle(Math.atan2(target[1] - y, target[0] - x) - th);
+      let tau = pidT.compute(errT, 0, DT);
+      let vDes = p.v_max * Math.max(0, Math.cos(errT)) ** 3;
+      if (k === points.length - 1) vDes = Math.min(vDes, 1.5 * d);
+      let F = pidV.compute(vDes, v, DT);
+      F = Math.max(-MAX_FORCE, Math.min(MAX_FORCE, F));
+      tau = Math.max(-MAX_TORQUE, Math.min(MAX_TORQUE, tau));
+      v += (F - LIN_FRICTION * v) / p.mass * DT;
+      w += (tau - ANG_FRICTION * w) / p.inertia * DT;
       th += w * DT;
       x += v * Math.cos(th) * DT; y += v * Math.sin(th) * DT;
       traj.push([x, y]);
     }
-    return { traj, chegou, pontos };
+    return { traj, reached, points };
   }
 
   // ---------------------------------------------------------------
-  // 7. Execução completa
+  // 7. Full run
   // ---------------------------------------------------------------
-  function calcular(p) {
-    const ini = [p.inicio_x, p.inicio_y], obj = [p.objetivo_x, p.objetivo_y];
-    const obstaculos = gerarObstaculos(p, criarRng(p.semente), ini, obj);
-    const grade = criarGrade(p, obstaculos);
-    const planos = {};
-    for (const chave of ["pf", "astar"]) {
+  function compute(p) {
+    const start = [p.start_x, p.start_y], goal = [p.goal_x, p.goal_y];
+    const obstacles = generateObstacles(p, createRng(p.seed), start, goal);
+    const grid = createGrid(p, obstacles);
+    const plans = {};
+    for (const key of ["pf", "astar"]) {
       const t0 = performance.now();
-      const { caminho, ok } = chave === "pf" ? planejarPF(p, obstaculos, ini, obj) : planejarAStar(p, grade, ini, obj);
-      const tPlano = performance.now() - t0;
-      const { traj, chegou, pontos } = seguir(caminho, p);
-      const erro = erroRastreamento(traj, caminho);
-      planos[chave] = {
-        caminho, ok, tPlano, lPlano: comprimento(caminho),
-        traj, chegou, pontos, lReal: comprimento(traj),
-        erroMax: erro.reduce((m, e) => Math.max(m, e), 0),
-        bateu: colidiu(traj, obstaculos), tSim: (traj.length - 1) * DT,
+      const { path, ok } = key === "pf" ? planPF(p, obstacles, start, goal) : planAStar(p, grid, start, goal);
+      const tPlan = performance.now() - t0;
+      const { traj, reached, points } = follow(path, p);
+      const error = trackingError(traj, path);
+      plans[key] = {
+        path, ok, tPlan, lPlan: pathLength(path),
+        traj, reached, points, lReal: pathLength(traj),
+        maxError: error.reduce((m, e) => Math.max(m, e), 0),
+        hit: collided(traj, obstacles), tSim: (traj.length - 1) * DT,
       };
     }
-    return { params: p, ini, obj, obstaculos, grade, planos };
+    return { params: p, start, goal, obstacles, grid, plans };
   }
 
-  return { SECOES, PARAMETROS, sortear, validar, calcular, comprimento };
+  return { SECTIONS, PARAMETERS, draw, validate, compute, pathLength };
 })();
 
 
@@ -462,42 +462,42 @@ const Engine = (() => {
 <script>
 (() => {
   const E = Engine;
-  const reduz = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  // [chave, rótulo, padrão, dica, chip]  (item de 2 posições = título de grupo)
-  const EXIBIR = [
-    ["Algoritmos", null],
-    ["pf", "Potential Fields", true, "Mostra o caminho do Potential Fields: o robô desce a \"ladeira\" de um campo de energia, atraído pelo objetivo e repelido pelos obstáculos.", "pf"],
-    ["astar", "A*", true, "Mostra o caminho do A*: busca na grade o caminho mais barato do início ao objetivo, desviando das células bloqueadas.", "astar"],
-    ["Caminhos", null],
-    ["planejado", "Caminho planejado (sem PID)", true, "O que o algoritmo calculou, antes de qualquer controle. É o caminho ideal, como se o robô fosse uma partícula sem inércia. Aparece tracejado."],
-    ["percorrido", "Caminho percorrido (com PID)", true, "O que um robô com massa e inércia realmente faz ao tentar seguir o caminho planejado, controlado por PIDs. Aparece contínuo."],
-    ["pontos", "Pontos-alvo do seguidor", false, "Os pontos em que o caminho foi dividido. O robô aponta para um por vez e muda para o próximo ao chegar perto."],
-    ["animar", "Animar o robô", !reduz, "Reproduz o percurso do robô em tempo acelerado (6x) a cada execução."],
-    ["Cenário", null],
-    ["obstaculos", "Obstáculos", true, "Desenha os obstáculos circulares sorteados."],
-    ["influencia", "Zona de influência (rho_0)", false, "Círculo tracejado em volta de cada obstáculo até onde o Potential Fields sente a repulsão.", "pf"],
-    ["grade", "Grade bloqueada do A*", false, "Células da grade que o A* trata como ocupadas: os obstáculos mais a margem de segurança.", "astar"],
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // [key, label, default, hint, chip]  (2-element item = group title)
+  const DISPLAY = [
+    ["Algorithms", null],
+    ["pf", "Potential Fields", true, "Shows the Potential Fields path: the robot goes down the \"slope\" of an energy field, attracted by the goal and repelled by the obstacles.", "pf"],
+    ["astar", "A*", true, "Shows the A* path: searches the grid for the cheapest path from start to goal, avoiding blocked cells.", "astar"],
+    ["Paths", null],
+    ["planned", "Planned path (without PID)", true, "What the algorithm computed, before any control. It is the ideal path, as if the robot were a particle with no inertia. Drawn dashed."],
+    ["driven", "Driven path (with PID)", true, "What a robot with mass and inertia actually does when trying to follow the planned path, controlled by PIDs. Drawn solid."],
+    ["points", "Follower target points", false, "The points the path was split into. The robot aims at one at a time and moves to the next when it gets close."],
+    ["animate", "Animate the robot", !reduceMotion, "Replays the robot's route in fast-forward (6x) on every run."],
+    ["Scenario", null],
+    ["obstacles", "Obstacles", true, "Draws the randomly placed circular obstacles."],
+    ["influence", "Influence zone (rho_0)", false, "Dashed circle around each obstacle showing how far Potential Fields feels the repulsion.", "pf"],
+    ["grid", "A* blocked grid", false, "Grid cells A* treats as occupied: the obstacles plus the safety margin.", "astar"],
   ];
-  const NOMES = { pf: "Potential Fields", astar: "A*" };
+  const NAMES = { pf: "Potential Fields", astar: "A*" };
 
-  const st = { valores: {}, aleatorio: {}, exibir: {}, resultado: null, anim: null, erro: null };
-  for (const [c, { padrao }] of Object.entries(E.PARAMETROS)) { st.valores[c] = padrao; st.aleatorio[c] = false; }
-  for (const it of EXIBIR) if (it[1] !== null) st.exibir[it[0]] = it[2];
-  const CHIPS = { cenario: "Cenário", pf: "PF", astar: "A*", pid: "PID" };
-  const NOMES_ALGO = { cenario: "Cenário (os dois algoritmos)", pf: "Potential Fields", astar: "A*", pid: "Robô com PID (os dois algoritmos)" };
+  const st = { values: {}, random: {}, display: {}, result: null, anim: null, error: null };
+  for (const [k, { defaultValue }] of Object.entries(E.PARAMETERS)) { st.values[k] = defaultValue; st.random[k] = false; }
+  for (const it of DISPLAY) if (it[1] !== null) st.display[it[0]] = it[2];
+  const CHIPS = { scenario: "Scenario", pf: "PF", astar: "A*", pid: "PID" };
+  const ALGO_NAMES = { scenario: "Scenario (both algorithms)", pf: "Potential Fields", astar: "A*", pid: "Robot with PID (both algorithms)" };
 
   const $ = (s) => document.querySelector(s);
-  const campos = {}, dados = {};          // chave -> input/select ; chave -> botão aleatório
+  const fields = {}, dice = {};          // key -> input/select ; key -> random button
 
-  // ---------- explicações ao passar o mouse (ou focar com o teclado) ----------
+  // ---------- explanations on hover (or on keyboard focus) ----------
   const tip = $("#tip");
-  let tipDono = null, tipTimer = null;
-  function mostrar(el, titulo, texto, pertence) {
-    tipDono = el;
-    tip.innerHTML = `<b></b><span></span>${pertence ? "<em></em>" : ""}`;
-    tip.querySelector("b").textContent = titulo;
-    tip.querySelector("span").textContent = texto;
-    if (pertence) tip.querySelector("em").textContent = "Pertence a: " + pertence;
+  let tipOwner = null, tipTimer = null;
+  function show(el, title, text, belongsTo) {
+    tipOwner = el;
+    tip.innerHTML = `<b></b><span></span>${belongsTo ? "<em></em>" : ""}`;
+    tip.querySelector("b").textContent = title;
+    tip.querySelector("span").textContent = text;
+    if (belongsTo) tip.querySelector("em").textContent = "Belongs to: " + belongsTo;
     const r = el.getBoundingClientRect(), w = Math.min(300, window.innerWidth - 16);
     tip.style.maxWidth = w + "px";
     tip.classList.add("on");
@@ -507,262 +507,262 @@ const Engine = (() => {
     tip.style.top = top + "px";
     tip.style.left = Math.max(8, Math.min(r.left + 12, window.innerWidth - w - 8)) + "px";
   }
-  function esconder(el) { if (tipDono === el) { tip.classList.remove("on"); tipDono = null; } }
-  let contaDica = 0;
-  function dica(el, campo, titulo, texto, pertence) {
-    if (!texto) return;
-    const id = "dica-" + (++contaDica);
-    const sr = document.createElement("span"); sr.className = "sr"; sr.id = id; sr.textContent = texto;
-    el.appendChild(sr); campo.setAttribute("aria-describedby", id);
-    el.addEventListener("pointerenter", (e) => { if (e.pointerType !== "touch") mostrar(el, titulo, texto, pertence); });
-    el.addEventListener("pointerleave", () => esconder(el));
-    el.addEventListener("focusin", () => { mostrar(el, titulo, texto, pertence); clearTimeout(tipTimer); tipTimer = setTimeout(() => esconder(el), 6000); });
-    el.addEventListener("focusout", () => esconder(el));
+  function hide(el) { if (tipOwner === el) { tip.classList.remove("on"); tipOwner = null; } }
+  let hintCount = 0;
+  function hint(el, field, title, text, belongsTo) {
+    if (!text) return;
+    const id = "hint-" + (++hintCount);
+    const sr = document.createElement("span"); sr.className = "sr"; sr.id = id; sr.textContent = text;
+    el.appendChild(sr); field.setAttribute("aria-describedby", id);
+    el.addEventListener("pointerenter", (e) => { if (e.pointerType !== "touch") show(el, title, text, belongsTo); });
+    el.addEventListener("pointerleave", () => hide(el));
+    el.addEventListener("focusin", () => { show(el, title, text, belongsTo); clearTimeout(tipTimer); tipTimer = setTimeout(() => hide(el), 6000); });
+    el.addEventListener("focusout", () => hide(el));
   }
-  window.addEventListener("scroll", () => { tip.classList.remove("on"); tipDono = null; }, true);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { tip.classList.remove("on"); tipDono = null; } });
+  window.addEventListener("scroll", () => { tip.classList.remove("on"); tipOwner = null; }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { tip.classList.remove("on"); tipOwner = null; } });
 
-  // ---------- painel ----------
+  // ---------- panel ----------
   const tabs = $("#tabs"), panes = $("#panes");
-  const nomesAbas = ["Exibir", ...E.SECOES.map((s) => s[0])];
-  nomesAbas.forEach((nome, i) => {
+  const tabNames = ["Display", ...E.SECTIONS.map((s) => s[0])];
+  tabNames.forEach((name, i) => {
     const b = document.createElement("button");
     b.className = "tab"; b.type = "button"; b.role = "tab"; b.id = "tab-" + i;
-    const id = i > 0 ? E.SECOES[i - 1][2].id : "";
+    const id = i > 0 ? E.SECTIONS[i - 1][2].id : "";
     b.innerHTML = i > 0 ? `<i class="tdot ${id}"></i>` : "";
-    b.appendChild(document.createTextNode(nome));
-    b.onclick = () => abrirAba(i);
+    b.appendChild(document.createTextNode(name));
+    b.onclick = () => openTab(i);
     tabs.appendChild(b);
     const p = document.createElement("div");
     p.className = "pane"; p.role = "tabpanel"; p.id = "pane-" + i; p.setAttribute("aria-labelledby", b.id);
     panes.appendChild(p);
   });
-  function abrirAba(i) {
-    nomesAbas.forEach((_, j) => {
+  function openTab(i) {
+    tabNames.forEach((_, j) => {
       $("#tab-" + j).setAttribute("aria-selected", j === i);
       $("#pane-" + j).hidden = j !== i;
     });
   }
 
-  // aba "Exibir"
-  const paneExibir = $("#pane-0");
-  for (const it of EXIBIR) {
-    if (it[1] === null) { const g = document.createElement("div"); g.className = "group"; g.textContent = it[0]; paneExibir.appendChild(g); continue; }
+  // "Display" tab
+  const displayPane = $("#pane-0");
+  for (const it of DISPLAY) {
+    if (it[1] === null) { const g = document.createElement("div"); g.className = "group"; g.textContent = it[0]; displayPane.appendChild(g); continue; }
     const l = document.createElement("label"); l.className = "check";
     const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = it[2]; cb.id = "ex-" + it[0];
-    const rot = document.createElement("span");
-    if (it[4]) { const c = document.createElement("span"); c.className = "chip " + it[4]; c.textContent = CHIPS[it[4]]; rot.appendChild(c); }
-    rot.appendChild(document.createTextNode(it[1]));
-    dica(l, cb, it[1], it[3], it[4] ? NOMES_ALGO[it[4]] : null);
-    cb.onchange = () => { st.exibir[it[0]] = cb.checked; if (it[0] === "animar") { if (cb.checked) iniciarAnimacao(); else st.anim = null; } desenhar(); tabela(); };
-    l.append(cb, rot);
-    paneExibir.appendChild(l);
+    const lbl = document.createElement("span");
+    if (it[4]) { const c = document.createElement("span"); c.className = "chip " + it[4]; c.textContent = CHIPS[it[4]]; lbl.appendChild(c); }
+    lbl.appendChild(document.createTextNode(it[1]));
+    hint(l, cb, it[1], it[3], it[4] ? ALGO_NAMES[it[4]] : null);
+    cb.onchange = () => { st.display[it[0]] = cb.checked; if (it[0] === "animate") { if (cb.checked) startAnimation(); else st.anim = null; } render(); table(); };
+    l.append(cb, lbl);
+    displayPane.appendChild(l);
   }
 
-  // abas de parâmetros
-  E.SECOES.forEach(([nome, ps, meta], i) => {
+  // parameter tabs
+  E.SECTIONS.forEach(([name, ps, meta], i) => {
     const pane = $("#pane-" + (i + 1));
-    const nota = document.createElement("p"); nota.className = "nota"; nota.textContent = meta.nota; pane.appendChild(nota);
-    for (const [chave, rotulo, , tipo, faixa, texto] of ps) {
+    const note = document.createElement("p"); note.className = "note"; note.textContent = meta.note; pane.appendChild(note);
+    for (const [key, label, , type, range, text] of ps) {
       const row = document.createElement("div"); row.className = "row";
-      const escolha = faixa.length > 2 || tipo === "str";
-      const faixaTxt = escolha ? "opções" : `faixa ${faixa[0]} a ${faixa[1]}`;
-      const lab = document.createElement("label"); lab.htmlFor = "p-" + chave;
-      lab.innerHTML = `<span class="chip ${meta.id}">${meta.chip}</span>${rotulo}<small>${faixaTxt}</small>`;
+      const choice = range.length > 2 || type === "str";
+      const rangeTxt = choice ? "options" : `range ${range[0]} to ${range[1]}`;
+      const lab = document.createElement("label"); lab.htmlFor = "p-" + key;
+      lab.innerHTML = `<span class="chip ${meta.id}">${meta.chip}</span>${label}<small>${rangeTxt}</small>`;
 
-      let campo;
-      if (escolha) {
-        campo = document.createElement("select");
-        for (const o of faixa) { const op = document.createElement("option"); op.value = op.textContent = String(o); campo.appendChild(op); }
+      let field;
+      if (choice) {
+        field = document.createElement("select");
+        for (const o of range) { const op = document.createElement("option"); op.value = op.textContent = String(o); field.appendChild(op); }
       } else {
-        campo = document.createElement("input"); campo.type = "number"; campo.inputMode = "decimal";
-        campo.step = tipo === "int" ? "1" : (faixa[1] - faixa[0] <= 1 ? "0.01" : "0.1");
+        field = document.createElement("input"); field.type = "number"; field.inputMode = "decimal";
+        field.step = type === "int" ? "1" : (range[1] - range[0] <= 1 ? "0.01" : "0.1");
       }
-      campo.id = "p-" + chave; campo.value = String(st.valores[chave]);
-      campo.onchange = () => {
+      field.id = "p-" + key; field.value = String(st.values[key]);
+      field.onchange = () => {
         let v;
-        if (tipo === "str") v = campo.value;
-        else if (campo.tagName === "SELECT") v = Number(campo.value);
-        else v = tipo === "int" ? Math.round(campo.valueAsNumber) : campo.valueAsNumber;
-        st.valores[chave] = v;
-        executar(false);
+        if (type === "str") v = field.value;
+        else if (field.tagName === "SELECT") v = Number(field.value);
+        else v = type === "int" ? Math.round(field.valueAsNumber) : field.valueAsNumber;
+        st.values[key] = v;
+        run(false);
       };
-      campos[chave] = campo;
+      fields[key] = field;
 
-      const d = document.createElement("button"); d.type = "button"; d.className = "dice"; d.textContent = "aleatório";
-      d.setAttribute("aria-pressed", "false"); d.title = "Sortear este parâmetro a cada execução";
-      d.onclick = () => definirAleatorio(chave, !st.aleatorio[chave]);
-      dados[chave] = d;
-      row.append(lab, campo, d);
-      dica(row, campo, rotulo, texto, NOMES_ALGO[meta.id]);
+      const d = document.createElement("button"); d.type = "button"; d.className = "dice"; d.textContent = "random";
+      d.setAttribute("aria-pressed", "false"); d.title = "Draw this parameter on every run";
+      d.onclick = () => setRandom(key, !st.random[key]);
+      dice[key] = d;
+      row.append(lab, field, d);
+      hint(row, field, label, text, ALGO_NAMES[meta.id]);
       pane.appendChild(row);
     }
   });
-  function definirAleatorio(chave, on) {
-    st.aleatorio[chave] = on;
-    dados[chave].setAttribute("aria-pressed", on);
-    campos[chave].disabled = on;
+  function setRandom(key, on) {
+    st.random[key] = on;
+    dice[key].setAttribute("aria-pressed", on);
+    fields[key].disabled = on;
   }
-  function sincronizar(chave) { campos[chave].value = String(st.valores[chave]); }
-  abrirAba(0);
+  function sync(key) { fields[key].value = String(st.values[key]); }
+  openTab(0);
 
-  // ---------- execução ----------
-  function executar(sortear) {
-    if (sortear) for (const c of Object.keys(st.valores)) if (st.aleatorio[c]) { st.valores[c] = E.sortear(c); sincronizar(c); }
-    const p = { ...st.valores };
-    if (p.raio_max < p.raio_min) {
-      [p.raio_min, p.raio_max] = [p.raio_max, p.raio_min];
-      st.valores.raio_min = p.raio_min; st.valores.raio_max = p.raio_max; sincronizar("raio_min"); sincronizar("raio_max");
+  // ---------- execution ----------
+  function run(drawRandom) {
+    if (drawRandom) for (const k of Object.keys(st.values)) if (st.random[k]) { st.values[k] = E.draw(k); sync(k); }
+    const p = { ...st.values };
+    if (p.max_radius < p.min_radius) {
+      [p.min_radius, p.max_radius] = [p.max_radius, p.min_radius];
+      st.values.min_radius = p.min_radius; st.values.max_radius = p.max_radius; sync("min_radius"); sync("max_radius");
     }
-    const msg = E.validar(p);
-    if (msg) { st.erro = msg; status(); return; }
-    try { st.resultado = E.calcular(p); st.erro = null; }
-    catch (e) { st.erro = "Erro no cálculo: " + e.message; status(); return; }
-    iniciarAnimacao(); status(); legenda(); tabela(); desenhar();
+    const msg = E.validate(p);
+    if (msg) { st.error = msg; status(); return; }
+    try { st.result = E.compute(p); st.error = null; }
+    catch (e) { st.error = "Computation error: " + e.message; status(); return; }
+    startAnimation(); status(); legend(); table(); render();
   }
-  $("#b-exec").onclick = () => executar(true);
-  $("#b-sort").onclick = () => { for (const c of Object.keys(st.valores)) definirAleatorio(c, true); executar(true); };
-  $("#b-fix").onclick = () => { for (const c of Object.keys(st.valores)) definirAleatorio(c, false); };
-  $("#b-pad").onclick = () => {
-    for (const [c, { padrao }] of Object.entries(E.PARAMETROS)) { st.valores[c] = padrao; sincronizar(c); definirAleatorio(c, false); }
-    executar(false);
+  $("#b-run").onclick = () => run(true);
+  $("#b-rand").onclick = () => { for (const k of Object.keys(st.values)) setRandom(k, true); run(true); };
+  $("#b-lock").onclick = () => { for (const k of Object.keys(st.values)) setRandom(k, false); };
+  $("#b-def").onclick = () => {
+    for (const [k, { defaultValue }] of Object.entries(E.PARAMETERS)) { st.values[k] = defaultValue; sync(k); setRandom(k, false); }
+    run(false);
   };
 
-  // ---------- textos ----------
+  // ---------- text ----------
   function status() {
-    const s = $("#status"), r = st.resultado;
-    s.className = "status" + (st.erro ? " erro" : "");
-    if (st.erro) { s.textContent = st.erro; return; }
-    s.innerHTML = `<span>Semente ${r.params.semente} · ${r.obstaculos.length} obstáculos</span><span>início (${r.ini.map((v) => v.toFixed(1))}) → objetivo (${r.obj.map((v) => v.toFixed(1))})</span>`;
+    const s = $("#status"), r = st.result;
+    s.className = "status" + (st.error ? " error" : "");
+    if (st.error) { s.textContent = st.error; return; }
+    s.innerHTML = `<span>Seed ${r.params.seed} · ${r.obstacles.length} obstacles</span><span>start (${r.start.map((v) => v.toFixed(1))}) → goal (${r.goal.map((v) => v.toFixed(1))})</span>`;
   }
-  function legenda() {
-    $("#legenda").innerHTML = `<span><i class="sw tr"></i>tracejado: planejado, sem PID</span><span><i class="sw"></i>contínuo: percorrido, com PID</span>`;
+  function legend() {
+    $("#legend").innerHTML = `<span><i class="sw tr"></i>dashed: planned, without PID</span><span><i class="sw"></i>solid: driven, with PID</span>`;
   }
-  const pill = (ok, sim, nao) => `<span class="pill ${ok ? "ok" : "bad"}">${ok ? sim : nao}</span>`;
-  function tabela() {
-    const t = $("#tabela"), r = st.resultado;
+  const pill = (ok, yes, no) => `<span class="pill ${ok ? "ok" : "bad"}">${ok ? yes : no}</span>`;
+  function table() {
+    const t = $("#table"), r = st.result;
     if (!r) return;
-    let h = `<thead><tr><th>Algoritmo</th><th>Planejador</th><th>L planejado</th><th>L percorrido</th><th>Erro máx.</th><th>Robô</th><th>Colisão</th><th>Plan. (ms)</th><th>Sim. (s)</th></tr></thead><tbody>`;
+    let h = `<thead><tr><th>Algorithm</th><th>Planner</th><th>L planned</th><th>L driven</th><th>Max error</th><th>Robot</th><th>Collision</th><th>Plan (ms)</th><th>Sim. (s)</th></tr></thead><tbody>`;
     for (const k of ["pf", "astar"]) {
-      if (!st.exibir[k]) continue;
-      const a = r.planos[k];
-      h += `<tr><td><span class="dot" style="background:var(--${k === "pf" ? "pf" : "as"})"></span>${NOMES[k]}</td>
-        <td>${pill(a.ok, "achou", "falhou")}</td><td>${a.lPlano.toFixed(2)}</td><td>${a.lReal.toFixed(2)}</td>
-        <td>${a.erroMax.toFixed(2)}</td><td>${pill(a.chegou, "chegou", "não chegou")}</td>
-        <td>${pill(!a.bateu, "não", "SIM")}</td><td>${a.tPlano.toFixed(1)}</td><td>${a.tSim.toFixed(1)}</td></tr>`;
+      if (!st.display[k]) continue;
+      const a = r.plans[k];
+      h += `<tr><td><span class="dot" style="background:var(--${k === "pf" ? "pf" : "as"})"></span>${NAMES[k]}</td>
+        <td>${pill(a.ok, "found", "failed")}</td><td>${a.lPlan.toFixed(2)}</td><td>${a.lReal.toFixed(2)}</td>
+        <td>${a.maxError.toFixed(2)}</td><td>${pill(a.reached, "arrived", "did not arrive")}</td>
+        <td>${pill(!a.hit, "no", "YES")}</td><td>${a.tPlan.toFixed(1)}</td><td>${a.tSim.toFixed(1)}</td></tr>`;
     }
     t.innerHTML = h + "</tbody>";
-    const resumo = ["pf", "astar"].filter((k) => st.exibir[k]).map((k) => `${NOMES[k]}: planejador ${r.planos[k].ok ? "achou" : "falhou"}, comprimento ${r.planos[k].lPlano.toFixed(1)}`).join("; ");
-    $("#cv").setAttribute("aria-label", "Caminhos planejados e percorridos. " + resumo);
+    const summary = ["pf", "astar"].filter((k) => st.display[k]).map((k) => `${NAMES[k]}: planner ${r.plans[k].ok ? "found a path" : "failed"}, length ${r.plans[k].lPlan.toFixed(1)}`).join("; ");
+    $("#cv").setAttribute("aria-label", "Planned and driven paths. " + summary);
   }
 
-  // ---------- desenho ----------
+  // ---------- drawing ----------
   const cv = $("#cv"), ctx = cv.getContext("2d");
-  const cor = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-  function ajustar() {
+  const color = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function resize() {
     const dpr = window.devicePixelRatio || 1, w = cv.clientWidth;
     if (!w) return;
     cv.width = Math.round(w * dpr); cv.height = Math.round(w * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    desenhar();
+    render();
   }
-  new ResizeObserver(ajustar).observe(cv);
+  new ResizeObserver(resize).observe(cv);
 
-  function iniciarAnimacao() {
+  function startAnimation() {
     st.anim = null;
-    if (!st.exibir.animar || !st.resultado) return;
+    if (!st.display.animate || !st.result) return;
     st.anim = { t0: performance.now() };
-    requestAnimationFrame(passo);
+    requestAnimationFrame(frame);
   }
-  function passo(agora) {
+  function frame(now) {
     if (!st.anim) return;
-    desenhar(agora);
-    const r = st.resultado, fim = Math.max(...["pf", "astar"].map((k) => r.planos[k].tSim));
-    if ((agora - st.anim.t0) / 1000 * 6 >= fim) { st.anim = null; desenhar(); return; }   // 6x o tempo real
-    requestAnimationFrame(passo);
+    render(now);
+    const r = st.result, end = Math.max(...["pf", "astar"].map((k) => r.plans[k].tSim));
+    if ((now - st.anim.t0) / 1000 * 6 >= end) { st.anim = null; render(); return; }   // 6x real time
+    requestAnimationFrame(frame);
   }
 
-  function desenhar(agora) {
-    const r = st.resultado, S = cv.clientWidth;
+  function render(now) {
+    const r = st.result, S = cv.clientWidth;
     if (!r || !S) return;
-    const m = 28, esc = (S - 2 * m) / 12;
-    const X = (x) => m + (x + 1) * esc, Y = (y) => S - m - (y + 1) * esc;
-    const fg = cor("--fg"), muted = cor("--muted"), line = cor("--line");
+    const m = 28, scale = (S - 2 * m) / 12;
+    const X = (x) => m + (x + 1) * scale, Y = (y) => S - m - (y + 1) * scale;
+    const muted = color("--muted"), line = color("--line");
     ctx.clearRect(0, 0, S, S);
-    ctx.fillStyle = cor("--surface"); ctx.fillRect(0, 0, S, S);
+    ctx.fillStyle = color("--surface"); ctx.fillRect(0, 0, S, S);
 
-    // grade de referência e eixos (escala única: 1 unidade = esc px)
+    // reference grid and axes (single scale: 1 unit = scale px)
     ctx.lineWidth = 1; ctx.strokeStyle = line; ctx.fillStyle = muted;
-    ctx.font = "11px " + cor("--body"); ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.font = "11px " + color("--body"); ctx.textAlign = "center"; ctx.textBaseline = "top";
     for (let v = -1; v <= 11; v++) {
       ctx.globalAlpha = v % 2 === 0 ? 0.9 : 0.35;
       ctx.beginPath(); ctx.moveTo(X(v), Y(-1)); ctx.lineTo(X(v), Y(11)); ctx.moveTo(X(-1), Y(v)); ctx.lineTo(X(11), Y(v)); ctx.stroke();
     }
     ctx.globalAlpha = 1;
     for (let v = 0; v <= 10; v += 2) { ctx.fillText(v, X(v), S - m + 6); ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText(v, m - 6, Y(v)); ctx.textAlign = "center"; ctx.textBaseline = "top"; }
-    ctx.strokeStyle = cor("--obs-line"); ctx.strokeRect(X(0), Y(10), 10 * esc, 10 * esc);
+    ctx.strokeStyle = color("--obs-line"); ctx.strokeRect(X(0), Y(10), 10 * scale, 10 * scale);
 
-    // grade bloqueada do A*
-    if (st.exibir.grade) {
-      const { n, bloq } = r.grade, res = r.params.res;
-      ctx.fillStyle = cor("--obs"); ctx.globalAlpha = 0.8;
-      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (bloq[y * n + x]) ctx.fillRect(X(x * res - res / 2), Y(y * res + res / 2), res * esc, res * esc);
+    // A* blocked grid
+    if (st.display.grid) {
+      const { n, blocked } = r.grid, res = r.params.res;
+      ctx.fillStyle = color("--obs"); ctx.globalAlpha = 0.8;
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (blocked[y * n + x]) ctx.fillRect(X(x * res - res / 2), Y(y * res + res / 2), res * scale, res * scale);
       ctx.globalAlpha = 1;
     }
-    // obstáculos e zona de influência
-    if (st.exibir.obstaculos) for (const o of r.obstaculos) {
-      ctx.beginPath(); ctx.arc(X(o.c[0]), Y(o.c[1]), o.r * esc, 0, 7);
-      ctx.fillStyle = cor("--obs"); ctx.fill(); ctx.strokeStyle = cor("--obs-line"); ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.stroke();
+    // obstacles and influence zone
+    if (st.display.obstacles) for (const o of r.obstacles) {
+      ctx.beginPath(); ctx.arc(X(o.c[0]), Y(o.c[1]), o.r * scale, 0, 7);
+      ctx.fillStyle = color("--obs"); ctx.fill(); ctx.strokeStyle = color("--obs-line"); ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.stroke();
     }
-    if (st.exibir.influencia) for (const o of r.obstaculos) {
-      ctx.beginPath(); ctx.arc(X(o.c[0]), Y(o.c[1]), (o.r + r.params.rho_0) * esc, 0, 7);
-      ctx.strokeStyle = cor("--obs-line"); ctx.lineWidth = 1; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+    if (st.display.influence) for (const o of r.obstacles) {
+      ctx.beginPath(); ctx.arc(X(o.c[0]), Y(o.c[1]), (o.r + r.params.rho_0) * scale, 0, 7);
+      ctx.strokeStyle = color("--obs-line"); ctx.lineWidth = 1; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
     }
 
-    // caminhos
-    const tempo = st.anim ? ((agora ?? performance.now()) - st.anim.t0) / 1000 * 6 : Infinity;
+    // paths
+    const time = st.anim ? ((now ?? performance.now()) - st.anim.t0) / 1000 * 6 : Infinity;
     for (const k of ["pf", "astar"]) {
-      if (!st.exibir[k]) continue;
-      const a = r.planos[k], suave = cor(k === "pf" ? "--pf" : "--as"), forte = cor(k === "pf" ? "--pf-strong" : "--as-strong");
-      if (st.exibir.planejado) tracar(a.caminho, X, Y, suave, 2.2, [7, 5], a.caminho.length);
-      if (st.exibir.percorrido) {
-        const n = Math.min(a.traj.length, Math.floor(tempo / 0.05) + 1);
-        tracar(a.traj, X, Y, forte, 2.8, [], n);
-        if (st.exibir.pontos) { ctx.fillStyle = forte; for (const q of a.pontos) { ctx.beginPath(); ctx.arc(X(q[0]), Y(q[1]), 2.6, 0, 7); ctx.fill(); } }
-        robo(a.traj, n, X, Y, forte, esc);
+      if (!st.display[k]) continue;
+      const a = r.plans[k], soft = color(k === "pf" ? "--pf" : "--as"), strong = color(k === "pf" ? "--pf-strong" : "--as-strong");
+      if (st.display.planned) stroke(a.path, X, Y, soft, 2.2, [7, 5], a.path.length);
+      if (st.display.driven) {
+        const n = Math.min(a.traj.length, Math.floor(time / 0.05) + 1);
+        stroke(a.traj, X, Y, strong, 2.8, [], n);
+        if (st.display.points) { ctx.fillStyle = strong; for (const q of a.points) { ctx.beginPath(); ctx.arc(X(q[0]), Y(q[1]), 2.6, 0, 7); ctx.fill(); } }
+        robot(a.traj, n, X, Y, strong);
       }
     }
 
-    // início e objetivo
-    ctx.beginPath(); ctx.arc(X(r.ini[0]), Y(r.ini[1]), 7, 0, 7); ctx.fillStyle = cor("--ok"); ctx.fill();
-    ctx.strokeStyle = cor("--surface"); ctx.lineWidth = 2; ctx.stroke();
-    estrela(X(r.obj[0]), Y(r.obj[1]), 11, cor("--accent"));
+    // start and goal
+    ctx.beginPath(); ctx.arc(X(r.start[0]), Y(r.start[1]), 7, 0, 7); ctx.fillStyle = color("--ok"); ctx.fill();
+    ctx.strokeStyle = color("--surface"); ctx.lineWidth = 2; ctx.stroke();
+    star(X(r.goal[0]), Y(r.goal[1]), 11, color("--accent"));
   }
-  function tracar(pts, X, Y, c, w, tracejado, n) {
+  function stroke(pts, X, Y, c, w, dash, n) {
     if (n < 2) return;
     ctx.beginPath(); ctx.moveTo(X(pts[0][0]), Y(pts[0][1]));
     for (let i = 1; i < n; i++) ctx.lineTo(X(pts[i][0]), Y(pts[i][1]));
-    ctx.strokeStyle = c; ctx.lineWidth = w; ctx.setLineDash(tracejado); ctx.lineJoin = "round"; ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = c; ctx.lineWidth = w; ctx.setLineDash(dash); ctx.lineJoin = "round"; ctx.stroke(); ctx.setLineDash([]);
   }
-  function robo(pts, n, X, Y, c, esc) {            // triângulo apontando na direção do movimento
+  function robot(pts, n, X, Y, c) {                 // triangle pointing in the direction of motion
     if (n < 2) return;
     const a = pts[n - 1], b = pts[Math.max(0, n - 4)];
     const ang = Math.atan2(-(a[1] - b[1]), a[0] - b[0]);
     ctx.save(); ctx.translate(X(a[0]), Y(a[1])); ctx.rotate(ang);
     ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-6, 6); ctx.lineTo(-6, -6); ctx.closePath();
-    ctx.fillStyle = c; ctx.fill(); ctx.strokeStyle = cor("--surface"); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+    ctx.fillStyle = c; ctx.fill(); ctx.strokeStyle = color("--surface"); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
   }
-  function estrela(cx, cy, R, c) {
+  function star(cx, cy, R, c) {
     ctx.beginPath();
     for (let i = 0; i < 10; i++) { const rr = i % 2 ? R * 0.45 : R, a = -Math.PI / 2 + i * Math.PI / 5; ctx.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)); }
-    ctx.closePath(); ctx.fillStyle = c; ctx.fill(); ctx.strokeStyle = cor("--surface"); ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.closePath(); ctx.fillStyle = c; ctx.fill(); ctx.strokeStyle = color("--surface"); ctx.lineWidth = 1.5; ctx.stroke();
   }
 
-  // redesenha ao trocar de tema
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => desenhar());
-  new MutationObserver(() => desenhar()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  // redraw when the theme changes
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => render());
+  new MutationObserver(() => render()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-  legenda();
-  executar(false);
+  legend();
+  run(false);
 })();
 </script>

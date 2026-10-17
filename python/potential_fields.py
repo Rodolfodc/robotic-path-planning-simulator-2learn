@@ -1,36 +1,36 @@
 """
-Potential Fields (Campos Potenciais) -- versão mínima e didática.
+Potential Fields -- minimal, teaching-oriented version.
 
-Ideia (Khatib, 1986): o robô é uma partícula num campo de energia potencial U(q).
-  - O objetivo gera um potencial ATRATIVO (um "vale" no objetivo).
-  - Cada obstáculo gera um potencial REPULSIVO (um "morro" ao redor dele).
-O robô se move na direção da força F = -grad U, isto é, "desce a ladeira".
+Idea (Khatib, 1986): the robot is a particle in a potential energy field U(q).
+  - The goal creates an ATTRACTIVE potential (a "valley" at the goal).
+  - Each obstacle creates a REPULSIVE potential (a "hill" around it).
+The robot moves in the direction of the force F = -grad U, i.e. it "goes downhill".
 
-Uso em outros scripts:
+Usage from other scripts:
 
-    from potential_fields import gerar_obstaculos, planejar
-    obstaculos = gerar_obstaculos(4, rng)               # [(centro, raio), ...]
-    trajetoria, chegou = planejar(inicio, objetivo, obstaculos)
+    from potential_fields import generate_obstacles, plan
+    obstacles = generate_obstacles(4, rng)               # [(center, radius), ...]
+    trajectory, reached = plan(start, goal, obstacles)
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------------
-# 1. Parâmetros
+# 1. Parameters
 # ---------------------------------------------------------------
-k_att = 1.0    # ganho atrativo
-k_rep = 5.0    # ganho repulsivo
-rho_0 = 2.0    # distância de influência do obstáculo
-passo = 0.05   # tamanho do passo (taxa da descida de gradiente)
-tolerancia = 0.1
+k_att = 1.0    # attractive gain
+k_rep = 5.0    # repulsive gain
+rho_0 = 2.0    # obstacle influence distance
+step = 0.05    # step size (gradient descent rate)
+tolerance = 0.1
 max_iter = 2000
 
-# Obstáculos aleatórios
-raio_min, raio_max = 0.5, 1.2
-folga = 0.5    # distância mínima de início/objetivo/outros obstáculos
+# Random obstacles
+min_radius, max_radius = 0.5, 1.2
+clearance = 0.5    # minimum distance from start/goal/other obstacles
 
-verbose = True  # imprime o passo a passo das forças
+verbose = True  # prints the step-by-step forces
 
 
 def _log(*args, **kwargs):
@@ -39,155 +39,155 @@ def _log(*args, **kwargs):
 
 
 # ---------------------------------------------------------------
-# 2. Cenário
+# 2. Scenario
 # ---------------------------------------------------------------
-def gerar_obstaculos(n, rng, inicio=None, objetivo=None):
-    """Sorteia até n obstáculos circulares (centro, raio) sem cobrir
-    início/objetivo e sem sobreposição entre si."""
-    inicio = np.array([0.0, 0.0]) if inicio is None else inicio
-    objetivo = np.array([10.0, 10.0]) if objetivo is None else objetivo
+def generate_obstacles(n, rng, start=None, goal=None):
+    """Draws up to n circular obstacles (center, radius) that do not cover
+    start/goal and do not overlap each other."""
+    start = np.array([0.0, 0.0]) if start is None else start
+    goal = np.array([10.0, 10.0]) if goal is None else goal
     obs = []
-    tentativas = 0
-    while len(obs) < n and tentativas < 1000:
-        tentativas += 1
-        centro = rng.uniform(1.0, 9.0, size=2)
-        raio = rng.uniform(raio_min, raio_max)
-        # não pode cobrir início ou objetivo
-        if np.linalg.norm(centro - inicio) < raio + rho_0 / 2 + folga:
+    attempts = 0
+    while len(obs) < n and attempts < 1000:
+        attempts += 1
+        center = rng.uniform(1.0, 9.0, size=2)
+        radius = rng.uniform(min_radius, max_radius)
+        # must not cover start or goal
+        if np.linalg.norm(center - start) < radius + rho_0 / 2 + clearance:
             continue
-        if np.linalg.norm(centro - objetivo) < raio + rho_0 / 2 + folga:
+        if np.linalg.norm(center - goal) < radius + rho_0 / 2 + clearance:
             continue
-        # não pode sobrepor outros obstáculos
-        if any(np.linalg.norm(centro - c) < raio + r + folga for c, r in obs):
+        # must not overlap other obstacles
+        if any(np.linalg.norm(center - c) < radius + r + clearance for c, r in obs):
             continue
-        obs.append((centro, raio))
+        obs.append((center, radius))
     return obs
 
 
 # ---------------------------------------------------------------
-# 3. Força atrativa
-#    U_att(q) = 1/2 * k_att * ||q - q_obj||^2
-#    F_att(q) = -grad U_att = -k_att * (q - q_obj)
-#    -> vetor que aponta para o objetivo, proporcional à distância.
+# 3. Attractive force
+#    U_att(q) = 1/2 * k_att * ||q - q_goal||^2
+#    F_att(q) = -grad U_att = -k_att * (q - q_goal)
+#    -> vector pointing to the goal, proportional to the distance.
 # ---------------------------------------------------------------
-def forca_atrativa(q, objetivo):
+def attractive_force(q, goal):
     _log("\n\n")
     _log("=========== attractive_force ==========")
     _log("k_att: ", k_att)
     _log("-k_att: ", (-k_att))
     _log("q: ", q)
-    _log("objetivo: ", objetivo)
+    _log("goal: ", goal)
     _log("=========== =============== ==========")
-    return -k_att * (q - objetivo)
+    return -k_att * (q - goal)
 
 
 # ---------------------------------------------------------------
-# 4. Força repulsiva (de UM obstáculo)
-#    rho = distância da borda do obstáculo até o robô
-#    U_rep(q) = 1/2 * k_rep * (1/rho - 1/rho_0)^2   se rho <= rho_0
-#             = 0                                    se rho >  rho_0
+# 4. Repulsive force (from ONE obstacle)
+#    rho = distance from the obstacle's edge to the robot
+#    U_rep(q) = 1/2 * k_rep * (1/rho - 1/rho_0)^2   if rho <= rho_0
+#             = 0                                    if rho >  rho_0
 #    F_rep(q) = k_rep * (1/rho - 1/rho_0) * (1/rho^2) * grad(rho)
-#    grad(rho) = vetor unitário que sai do obstáculo e aponta para o robô.
-#    -> longe: nenhuma força. Perto: força que cresce rápido (tende a infinito).
+#    grad(rho) = unit vector leaving the obstacle and pointing to the robot.
+#    -> far away: no force. Close: a force that grows fast (tends to infinity).
 # ---------------------------------------------------------------
-def forca_repulsiva(q, centro, raio):
+def repulsive_force(q, center, radius):
     _log("\n\n")
-    _log("=========== respulsive_force ==========")
-    _log("centro: ", centro)
-    _log("raio: ", raio)
+    _log("=========== repulsive_force ==========")
+    _log("center: ", center)
+    _log("radius: ", radius)
     _log("q: ", q)
 
-    diferenca = q - centro
-    _log("[diferenca = q - centro]")
-    _log("diferenca: ", diferenca)
-    dist_centro = np.linalg.norm(diferenca)
-    _log("dist_centro: ", dist_centro)
-    _log("rho = dist_centro - raio")
-    rho = dist_centro - raio            # distância até a borda
+    difference = q - center
+    _log("[difference = q - center]")
+    _log("difference: ", difference)
+    dist_center = np.linalg.norm(difference)
+    _log("dist_center: ", dist_center)
+    _log("rho = dist_center - radius")
+    rho = dist_center - radius          # distance to the edge
     _log("rho: ", rho)
     _log("rho_0: ", rho_0)
 
     _log("rho > rho_0 : ", (rho > rho_0))
     if rho > rho_0:
-        _log("FORA da zona de influência")
-        _log("Vai retornar: ", np.zeros(2))
-        return np.zeros(2)              # fora da zona de influência
+        _log("OUTSIDE the influence zone")
+        _log("Will return: ", np.zeros(2))
+        return np.zeros(2)              # outside the influence zone
 
-    _log("DENTRO da Zona de influencia")
+    _log("INSIDE the influence zone")
     _log("PREV rho: ", rho)
     _log("1e-3: ", 1e-3)
-    rho = max(rho, 1e-3)                # evita divisão por zero
+    rho = max(rho, 1e-3)                # avoids division by zero
     _log("NEW rho: ", rho)
 
-    _log(f"{diferenca=}")
-    _log(f"{dist_centro=}")
-    direcao = diferenca / dist_centro   # grad(rho), vetor unitário
-    _log(f"{direcao=}")
+    _log(f"{difference=}")
+    _log(f"{dist_center=}")
+    direction = difference / dist_center   # grad(rho), unit vector
+    _log(f"{direction=}")
 
-    _log(f"{k_rep * (1/rho - 1/rho_0) * (1/rho**2) * direcao=}")
+    _log(f"{k_rep * (1/rho - 1/rho_0) * (1/rho**2) * direction=}")
 
     _log("=========== =============== ===========")
-    return k_rep * (1/rho - 1/rho_0) * (1/rho**2) * direcao
+    return k_rep * (1/rho - 1/rho_0) * (1/rho**2) * direction
 
 
 # ---------------------------------------------------------------
-# 5. Laço principal: descida de gradiente
-#    q_{k+1} = q_k + passo * F_total(q_k)
+# 5. Main loop: gradient descent
+#    q_{k+1} = q_k + step * F_total(q_k)
 # ---------------------------------------------------------------
-def planejar(inicio, objetivo, obstaculos):
-    """Retorna (trajetoria Nx2, chegou: bool)."""
-    q = np.array(inicio, dtype=float)
-    objetivo = np.asarray(objetivo, dtype=float)
-    trajetoria = [q.copy()]
-    chegou = False
+def plan(start, goal, obstacles):
+    """Returns (trajectory Nx2, reached: bool)."""
+    q = np.array(start, dtype=float)
+    goal = np.asarray(goal, dtype=float)
+    trajectory = [q.copy()]
+    reached = False
 
     for i in range(max_iter):
-        F = forca_atrativa(q, objetivo)
-        for centro, raio in obstaculos:
-            F += forca_repulsiva(q, centro, raio)
+        F = attractive_force(q, goal)
+        for center, radius in obstacles:
+            F += repulsive_force(q, center, radius)
 
-        q = q + passo * F
-        trajetoria.append(q.copy())
+        q = q + step * F
+        trajectory.append(q.copy())
 
-        if np.linalg.norm(q - objetivo) < tolerancia:
-            _log(f"Objetivo alcançado em {i + 1} iterações.")
-            chegou = True
+        if np.linalg.norm(q - goal) < tolerance:
+            _log(f"Goal reached in {i + 1} iterations.")
+            reached = True
             break
     else:
-        _log("Não chegou ao objetivo (provável mínimo local).")
+        _log("Did not reach the goal (likely a local minimum).")
 
-    return np.array(trajetoria), chegou
+    return np.array(trajectory), reached
 
 
 # ---------------------------------------------------------------
-# 6. Execução direta: cenário aleatório + visualização
+# 6. Direct run: random scenario + visualization
 # ---------------------------------------------------------------
 if __name__ == "__main__":
-    inicio = np.array([0.0, 0.0])
-    objetivo = np.array([10.0, 10.0])
+    start = np.array([0.0, 0.0])
+    goal = np.array([10.0, 10.0])
 
-    n_obstaculos = 4
-    semente = None     # defina um inteiro para reproduzir o mesmo cenário
-    if semente is None:
-        semente = int(np.random.SeedSequence().entropy % 2**32)
-    rng = np.random.default_rng(semente)
-    print("semente:", semente)
+    n_obstacles = 4
+    seed = None     # set an integer to reproduce the same scenario
+    if seed is None:
+        seed = int(np.random.SeedSequence().entropy % 2**32)
+    rng = np.random.default_rng(seed)
+    print("seed:", seed)
 
-    obstaculos = gerar_obstaculos(n_obstaculos, rng, inicio, objetivo)
-    print("=========== obstaculos ===========")
-    for k, (c, r) in enumerate(obstaculos):
-        print(f"obstaculo {k}: centro=({c[0]:.2f}, {c[1]:.2f}) raio={r:.2f}")
-    print("==================================")
+    obstacles = generate_obstacles(n_obstacles, rng, start, goal)
+    print("=========== obstacles ===========")
+    for k, (c, r) in enumerate(obstacles):
+        print(f"obstacle {k}: center=({c[0]:.2f}, {c[1]:.2f}) radius={r:.2f}")
+    print("=================================")
 
-    trajetoria, _ = planejar(inicio, objetivo, obstaculos)
+    trajectory, _ = plan(start, goal, obstacles)
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    for centro, raio in obstaculos:
-        ax.add_patch(plt.Circle(centro, raio, color="gray"))
-        ax.add_patch(plt.Circle(centro, raio + rho_0, fill=False, ls="--", color="gray"))
-    ax.plot(trajetoria[:, 0], trajetoria[:, 1], "b.-", markersize=2, label="trajetória")
-    ax.plot(*inicio, "go", markersize=10, label="início")
-    ax.plot(*objetivo, "r*", markersize=15, label="objetivo")
+    for center, radius in obstacles:
+        ax.add_patch(plt.Circle(center, radius, color="gray"))
+        ax.add_patch(plt.Circle(center, radius + rho_0, fill=False, ls="--", color="gray"))
+    ax.plot(trajectory[:, 0], trajectory[:, 1], "b.-", markersize=2, label="trajectory")
+    ax.plot(*start, "go", markersize=10, label="start")
+    ax.plot(*goal, "r*", markersize=15, label="goal")
     ax.set_aspect("equal")
     ax.legend()
     ax.set_title("Potential Fields")

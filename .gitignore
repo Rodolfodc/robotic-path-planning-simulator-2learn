@@ -2,5 +2,5 @@
 __pycache__/
 *.pyc
 .DS_Store
-# gráficos gerados ao rodar os scripts
+# plots generated when running the scripts
 python/*.png
