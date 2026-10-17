@@ -8,7 +8,7 @@ Compara dois jeitos de ir do início ao objetivo entre obstáculos circulares al
 
 ## Ver online
 
-**https://SEU_USUARIO.github.io/planejadores-de-caminho/**
+**https://rodolfodc.github.io/robotic-path-planning-simulator-2learn/**
 
 Não precisa instalar nada. Troque qualquer parâmetro e o resultado é recalculado na hora. Cada parâmetro mostra a que algoritmo pertence e uma explicação ao passar o mouse, e pode ser marcado como **aleatório** para ser sorteado a cada execução.
 
